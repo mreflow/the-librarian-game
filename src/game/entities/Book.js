@@ -36,6 +36,11 @@ export class Book extends Entity {
     // Glow effect when on floor
     this.glowIntensity = 0;
     this.glowDirection = 1;
+    
+    // Pre-create glow canvas for performance
+    this.glowCanvas = null;
+    this.glowCtx = null;
+    this.glowNeedsUpdate = true;
   }
   
   update(deltaTime) {
@@ -116,28 +121,17 @@ export class Book extends Entity {
     
     // Draw glow effect if on floor
     if (!this.isHeld && !this.isShelved) {
-      ctx.save();
-      ctx.globalAlpha = this.glowIntensity * 0.5;
-      ctx.fillStyle = this.getColorHex();
-      ctx.beginPath();
-      ctx.arc(
-        this.getCenterX(),
-        this.getCenterY(),
-        20,
-        0,
-        Math.PI * 2
-      );
-      ctx.filter = 'blur(8px)';
-      ctx.fill();
-      ctx.restore();
+      this.renderOptimizedGlow(ctx);
       
-      // Sparkle effect
+      // Sparkle effect - optimized to reduce random calls
       if (Math.sin(this.sparkleTimer * 5) > 0.5) {
         ctx.save();
         ctx.fillStyle = '#ffffff';
         ctx.globalAlpha = 0.8;
-        const sparkleX = this.x + Math.random() * this.width;
-        const sparkleY = this.y + Math.random() * this.height;
+        // Use deterministic sparkle position based on timer to reduce randomness
+        const sparkleOffset = (this.sparkleTimer * 3) % 1;
+        const sparkleX = this.x + sparkleOffset * this.width;
+        const sparkleY = this.y + (sparkleOffset * 0.7) * this.height;
         ctx.fillRect(sparkleX - 1, sparkleY - 1, 2, 2);
         ctx.restore();
       }
@@ -173,6 +167,44 @@ export class Book extends Entity {
     ctx.restore();
   }
   
+  renderOptimizedGlow(ctx) {
+    // Create glow canvas once and reuse it
+    if (!this.glowCanvas || this.glowNeedsUpdate) {
+      this.createGlowCanvas();
+      this.glowNeedsUpdate = false;
+    }
+    
+    // Draw the pre-rendered glow with current intensity
+    if (this.glowCanvas) {
+      ctx.save();
+      ctx.globalAlpha = this.glowIntensity * 0.5;
+      ctx.drawImage(
+        this.glowCanvas,
+        this.getCenterX() - 25, // Center the 50x50 glow canvas
+        this.getCenterY() - 25
+      );
+      ctx.restore();
+    }
+  }
+  
+  createGlowCanvas() {
+    // Create a small canvas for the glow effect
+    this.glowCanvas = document.createElement('canvas');
+    this.glowCanvas.width = 50;
+    this.glowCanvas.height = 50;
+    this.glowCtx = this.glowCanvas.getContext('2d');
+    
+    // Create radial gradient for glow
+    const gradient = this.glowCtx.createRadialGradient(25, 25, 5, 25, 25, 25);
+    gradient.addColorStop(0, this.getColorHex());
+    gradient.addColorStop(0.5, this.getColorHex() + '80'); // 50% opacity
+    gradient.addColorStop(1, this.getColorHex() + '00'); // Transparent
+    
+    // Fill the canvas with the gradient
+    this.glowCtx.fillStyle = gradient;
+    this.glowCtx.fillRect(0, 0, 50, 50);
+  }
+
   getColorHex() {
     const colors = {
       red: '#ff4444',
