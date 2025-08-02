@@ -14,6 +14,12 @@ export class Shelf extends Entity {
     this.emptySlotGlow = 0;
     this.emptySlotGlowDirection = 1;
     
+    // Pre-create glow elements for performance
+    this.glowCanvas = null;
+    this.glowCtx = null;
+    this.glowNeedsUpdate = true;
+    this.lastGlowColor = null;
+    
     // Collision box (solid obstacle) - covers entire shelf
     this.collisionBox = {
       offsetX: 0,
@@ -78,36 +84,9 @@ export class Shelf extends Entity {
     ctx.fillStyle = this.getColorHex();
     ctx.fillRect(this.x, this.y - 8, this.width, 6);
     
-    // Draw empty slot indicators
+    // Draw empty slot indicators with optimized glow
     if (this.hasEmptySlots()) {
-      const slotsPerRow = 3;
-      const rows = 2;
-      const slotWidth = this.width / slotsPerRow;
-      const slotHeight = 20;
-      
-      ctx.globalAlpha = this.emptySlotGlow * 0.5;
-      ctx.strokeStyle = this.getColorHex();
-      ctx.lineWidth = 2;
-      
-      let slotIndex = 0;
-      for (let row = 0; row < rows; row++) {
-        for (let col = 0; col < slotsPerRow; col++) {
-          if (slotIndex < this.capacity && !this.books[slotIndex]) {
-            const slotX = this.x + col * slotWidth + 4;
-            const slotY = this.y + 24 + row * 24;
-            
-            ctx.strokeRect(slotX, slotY, slotWidth - 8, slotHeight);
-            
-            // Draw "+" in empty slot
-            ctx.font = '16px Arial';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillStyle = this.getColorHex();
-            ctx.fillText('+', slotX + (slotWidth - 8) / 2, slotY + slotHeight / 2);
-          }
-          slotIndex++;
-        }
-      }
+      this.renderOptimizedEmptySlots(ctx);
     }
     
     ctx.restore();
@@ -152,6 +131,94 @@ export class Shelf extends Entity {
     });
   }
   
+  renderOptimizedEmptySlots(ctx) {
+    // Create or update glow canvas if needed
+    const currentColor = this.getColorHex();
+    if (!this.glowCanvas || this.glowNeedsUpdate || this.lastGlowColor !== currentColor) {
+      this.createEmptySlotGlowCanvas();
+      this.glowNeedsUpdate = false;
+      this.lastGlowColor = currentColor;
+    }
+    
+    const slotsPerRow = 3;
+    const rows = 2;
+    const slotWidth = this.width / slotsPerRow;
+    const slotHeight = 20;
+    
+    // Draw glow background for all empty slots at once
+    if (this.glowCanvas) {
+      ctx.save();
+      ctx.globalAlpha = this.emptySlotGlow * 0.3;
+      
+      let slotIndex = 0;
+      for (let row = 0; row < rows; row++) {
+        for (let col = 0; col < slotsPerRow; col++) {
+          if (slotIndex < this.capacity && !this.books[slotIndex]) {
+            const slotX = this.x + col * slotWidth + 4;
+            const slotY = this.y + 24 + row * 24;
+            
+            // Draw pre-rendered glow
+            ctx.drawImage(this.glowCanvas, slotX - 2, slotY - 2);
+          }
+          slotIndex++;
+        }
+      }
+      ctx.restore();
+    }
+    
+    // Draw slot outlines and "+" symbols
+    ctx.save();
+    ctx.globalAlpha = this.emptySlotGlow * 0.8;
+    ctx.strokeStyle = currentColor;
+    ctx.lineWidth = 2;
+    ctx.font = '16px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = currentColor;
+    
+    let slotIndex = 0;
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < slotsPerRow; col++) {
+        if (slotIndex < this.capacity && !this.books[slotIndex]) {
+          const slotX = this.x + col * slotWidth + 4;
+          const slotY = this.y + 24 + row * 24;
+          
+          ctx.strokeRect(slotX, slotY, slotWidth - 8, slotHeight);
+          ctx.fillText('+', slotX + (slotWidth - 8) / 2, slotY + slotHeight / 2);
+        }
+        slotIndex++;
+      }
+    }
+    ctx.restore();
+  }
+  
+  createEmptySlotGlowCanvas() {
+    const slotWidth = this.width / 3;
+    const slotHeight = 20;
+    
+    // Create canvas slightly larger than slot for glow effect
+    this.glowCanvas = document.createElement('canvas');
+    this.glowCanvas.width = slotWidth - 4; // slotWidth - 8 + 4 padding
+    this.glowCanvas.height = slotHeight + 4; // slotHeight + 4 padding
+    this.glowCtx = this.glowCanvas.getContext('2d');
+    
+    // Create subtle glow gradient
+    const centerX = this.glowCanvas.width / 2;
+    const centerY = this.glowCanvas.height / 2;
+    const gradient = this.glowCtx.createRadialGradient(
+      centerX, centerY, 0,
+      centerX, centerY, Math.max(this.glowCanvas.width, this.glowCanvas.height) / 2
+    );
+    
+    const color = this.getColorHex();
+    gradient.addColorStop(0, color + '40'); // 25% opacity
+    gradient.addColorStop(0.7, color + '20'); // 12% opacity
+    gradient.addColorStop(1, color + '00'); // Transparent
+    
+    this.glowCtx.fillStyle = gradient;
+    this.glowCtx.fillRect(0, 0, this.glowCanvas.width, this.glowCanvas.height);
+  }
+
   getColorHex() {
     const colors = {
       red: '#ff4444',

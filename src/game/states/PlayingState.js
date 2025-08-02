@@ -217,6 +217,30 @@ export class PlayingState extends State {
       input.ensureFocus();
     }
     
+    // Test spawning with "1" key for performance testing
+    if (input.isKeyPressed('1')) {
+      // Spawn 10 kids and 20 books for late-game testing
+      for (let i = 0; i < 10; i++) {
+        const spawnPoint = this.spawnPoints[Math.floor(Math.random() * this.spawnPoints.length)];
+        const kid = new Kid(this.game, spawnPoint.x, spawnPoint.y, Math.floor(Math.random() * 3) + 1);
+        this.kids.push(kid);
+      }
+      
+      // Spawn books randomly on the floor
+      for (let i = 0; i < 20; i++) {
+        const colors = ['red', 'blue', 'green', 'yellow', 'purple', 'orange'];
+        const color = colors[Math.floor(Math.random() * colors.length)];
+        const book = new Book(this.game, 
+          Math.random() * (this.worldWidth - 100) + 50,
+          Math.random() * (this.worldHeight - 100) + 50,
+          color
+        );
+        this.books.push(book);
+      }
+      
+      console.log(`[TEST SPAWN] Added 10 kids and 20 books. Total: ${this.kids.length} kids, ${this.books.length} books`);
+    }
+
     // Handle pause
     if (input.isKeyPressed('p') || input.isKeyPressed('Escape')) {
       // Pause music when pausing game
