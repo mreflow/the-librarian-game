@@ -35,7 +35,7 @@ export class Game {
     
     // Debug info
     this.debug = {
-      showFPS: false, // Disabled FPS counter
+      showFPS: true,
       showCollisionBoxes: false,
       showGrid: false
     };
@@ -62,22 +62,16 @@ export class Game {
     this.canvas.height = this.height;
     
     // Handle window resize
-    this.handleResize();
     window.addEventListener('resize', () => this.handleResize());
   }
   
   handleResize() {
-    const container = this.canvas.parentElement;
-    const containerWidth = container.clientWidth;
-    const containerHeight = container.clientHeight;
-    
-    const scale = Math.min(
-      containerWidth / this.width,
-      containerHeight / this.height
-    );
-    
-    this.canvas.style.width = `${this.width * scale}px`;
-    this.canvas.style.height = `${this.height * scale}px`;
+    this.width = window.innerWidth;
+    this.height = window.innerHeight;
+    this.canvas.width = this.width;
+    this.canvas.height = this.height;
+    this.camera.viewportWidth = this.width;
+    this.camera.viewportHeight = this.height;
   }
   
   async init() {
@@ -152,13 +146,13 @@ export class Game {
     const fps = this.gameLoop.getFPS();
     
     this.ctx.save();
-    this.ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-    this.ctx.fillRect(this.width - 80, 5, 70, 25);
+    this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    this.ctx.fillRect(this.width - 100, 10, 90, 25);
     
-    this.ctx.fillStyle = '#000';
+    this.ctx.fillStyle = '#fff';
     this.ctx.font = '14px monospace';
     this.ctx.textAlign = 'right';
-    this.ctx.fillText(`FPS: ${fps}`, this.width - 10, 22);
+    this.ctx.fillText(`FPS: ${fps}`, this.width - 15, 27);
     
     this.ctx.restore();
   }
