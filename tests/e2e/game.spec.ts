@@ -4,6 +4,14 @@ import { ALL_TOOLS, SAVE_KEY, debugSnapshot, openTitle, startRun, unlockedSave }
 
 const pageErrors = new WeakMap<Page, string[]>();
 
+const visualFacingDot = (actor: { vx: number; vz: number; rotationY: number }): number => {
+  const speed = Math.hypot(actor.vx, actor.vz);
+  if (speed === 0) return 1;
+  const frontX = -Math.sin(actor.rotationY);
+  const frontZ = -Math.cos(actor.rotationY);
+  return frontX * (actor.vx / speed) + frontZ * (actor.vz / speed);
+};
+
 test.beforeEach(async ({ page }) => {
   const errors: string[] = [];
   pageErrors.set(page, errors);
@@ -104,12 +112,22 @@ test('opens a first run with an immediate guided task and the corrected W/S dire
   await page.keyboard.up('KeyW');
   const afterW = await debugSnapshot(page);
   expect(afterW.player.z).toBeGreaterThan(before.player.z);
+  expect(visualFacingDot({
+    vx: afterW.player.facingX,
+    vz: afterW.player.facingZ,
+    rotationY: afterW.player.rotationY,
+  })).toBeGreaterThan(0.999);
 
   await page.keyboard.down('KeyS');
   await page.waitForTimeout(140);
   await page.keyboard.up('KeyS');
   const afterS = await debugSnapshot(page);
   expect(afterS.player.z).toBeLessThan(afterW.player.z);
+  expect(visualFacingDot({
+    vx: afterS.player.facingX,
+    vz: afterS.player.facingZ,
+    rotationY: afterS.player.rotationY,
+  })).toBeGreaterThan(0.999);
 });
 
 test('offers a replayable tutorial after prior shifts', async ({ page }) => {
@@ -191,6 +209,11 @@ test('starts ordinary shifts with visible returns and a concrete objective', asy
   const opening = await debugSnapshot(page);
   expect(opening.director.looseBooks).toBeGreaterThanOrEqual(7);
   expect(opening.books.filter((book) => book.location === 'floor').every((book) => book.sourceShelfId !== null)).toBe(true);
+
+  await page.waitForTimeout(500);
+  const movingVisitors = (await debugSnapshot(page)).actors.filter((actor) => Math.hypot(actor.vx, actor.vz) > 0.1);
+  expect(movingVisitors.length).toBeGreaterThan(0);
+  expect(movingVisitors.every((actor) => visualFacingDot(actor) > 0.999)).toBe(true);
 
   const firstSlot = hud.locator('.book-slot').first();
   await firstSlot.evaluate((node) => {

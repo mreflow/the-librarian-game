@@ -23,6 +23,7 @@ import type { Telemetry } from '../systems/Telemetry';
 import { applyChaosRelief, difficultyMultiplier, initialChaos, rewardMultiplier, updateChaos } from './Balance';
 import { BookSystem } from './BookSystem';
 import { createEffectRing, createLibrarianVisual } from './EntityFactory';
+import { characterFacingRotation } from './CharacterFacing';
 import { KidSystem } from './KidSystem';
 import type { PlayerRuntime, RuntimeEvent, ShelfRuntime } from './models';
 import { NavigationSystem } from './NavigationSystem';
@@ -68,7 +69,14 @@ interface DebugControls {
 
 interface DebugSnapshot {
   options: RunOptions;
-  player: { x: number; z: number; carriedBooks: number };
+  player: {
+    x: number;
+    z: number;
+    facingX: number;
+    facingZ: number;
+    rotationY: number;
+    carriedBooks: number;
+  };
   tutorial: ReturnType<TutorialDirector['snapshot']> & { marker: { x: number; z: number } | null };
   chaos: ChaosState;
   progression: {
@@ -211,11 +219,13 @@ export class LibraryGame {
     this.tutorial = new TutorialDirector(options.tutorial);
     const playerVisual = createLibrarianVisual(this.scene, librarian, settings.reducedMotion);
     const initialPosition = this.navigation.nearestOpenPoint(new Vector3(-6, 0, -map.depth / 2 + 3), 0.7);
+    const initialFacing = new Vector3(0, 0, 1);
     playerVisual.root.position.copyFrom(initialPosition);
+    playerVisual.root.rotation.y = characterFacingRotation(initialFacing);
     this.player = {
       position: initialPosition,
       velocity: Vector3.Zero(),
-      facing: new Vector3(0, 0, 1),
+      facing: initialFacing,
       stamina: 100,
       maxStamina: 100,
       carry: [],
@@ -363,7 +373,7 @@ export class LibraryGame {
     this.player.velocity = this.player.position.subtract(before).scale(1 / Math.max(delta, 0.001));
     if (this.player.velocity.lengthSquared() > 0.02) {
       this.player.facing.copyFrom(this.player.velocity).normalize();
-      this.player.visual.root.rotation.y = Math.atan2(this.player.facing.x, this.player.facing.z);
+      this.player.visual.root.rotation.y = characterFacingRotation(this.player.facing);
     }
     this.player.visual.root.position.x = this.player.position.x;
     this.player.visual.root.position.z = this.player.position.z;
@@ -1018,7 +1028,14 @@ export class LibraryGame {
         const progression = this.progression.snapshot();
         return {
           options: this.options,
-          player: { x: this.player.position.x, z: this.player.position.z, carriedBooks: this.player.carry.length },
+          player: {
+            x: this.player.position.x,
+            z: this.player.position.z,
+            facingX: this.player.facing.x,
+            facingZ: this.player.facing.z,
+            rotationY: this.player.visual.root.rotation.y,
+            carriedBooks: this.player.carry.length,
+          },
           tutorial: {
             ...this.tutorial.snapshot(),
             marker: this.tutorialMarkerTarget

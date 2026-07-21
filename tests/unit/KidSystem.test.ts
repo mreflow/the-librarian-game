@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { MAPS } from '../../src/v2/data/maps';
 import { BookSystem } from '../../src/v2/game/BookSystem';
+import { characterVisualForward } from '../../src/v2/game/CharacterFacing';
 import { kidFacingRotation, KidSystem } from '../../src/v2/game/KidSystem';
 import type { PlayerRuntime, ShelfRuntime } from '../../src/v2/game/models';
 import { NavigationSystem } from '../../src/v2/game/NavigationSystem';
@@ -71,10 +72,26 @@ describe('KidSystem intervention and lamps', () => {
   });
 
   it('rotates the visible front of a kid toward its movement direction', () => {
-    expect(Math.cos(kidFacingRotation(new Vector3(0, 0, 1)))).toBeCloseTo(-1);
-    expect(Math.sin(kidFacingRotation(new Vector3(0, 0, 1)))).toBeCloseTo(0);
-    expect(Math.cos(kidFacingRotation(new Vector3(0, 0, -1)))).toBeCloseTo(1);
-    expect(Math.sin(kidFacingRotation(new Vector3(0, 0, -1)))).toBeCloseTo(0);
+    for (const direction of [
+      new Vector3(0, 0, 1),
+      new Vector3(0, 0, -1),
+      new Vector3(1, 0, 0),
+      new Vector3(-1, 0, 0),
+      new Vector3(1, 0, 1).normalize(),
+    ]) {
+      const visualFront = characterVisualForward(kidFacingRotation(direction));
+      expect(visualFront.x * direction.x + visualFront.z * direction.z).toBeCloseTo(1);
+    }
+  });
+
+  it('faces a visitor toward its first destination before its first movement frame', () => {
+    const kid = kids.spawn('browser')[0];
+    expect(kid).toBeDefined();
+    if (!kid) return;
+
+    const direction = kid.target.subtract(kid.position).normalize();
+    const visualFront = characterVisualForward(kid.visual.root.rotation.y);
+    expect(visualFront.x * direction.x + visualFront.z * direction.z).toBeCloseTo(1);
   });
 
   it('separates overlapping visitors while they continue toward a shared destination', () => {

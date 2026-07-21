@@ -23,7 +23,14 @@ interface DebugSnapshot {
     seed: number;
     tutorial: boolean;
   };
-  player: { x: number; z: number; carriedBooks: number };
+  player: {
+    x: number;
+    z: number;
+    facingX: number;
+    facingZ: number;
+    rotationY: number;
+    carriedBooks: number;
+  };
   tutorial: {
     active: boolean;
     step: { id: string; number: number; total: number; title: string } | null;

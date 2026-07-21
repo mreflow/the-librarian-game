@@ -3,6 +3,7 @@ import { Scene } from '@babylonjs/core/scene.js';
 import { KIDS } from '../data/content';
 import type { KidArchetype } from '../types';
 import type { Rng } from '../systems/Rng';
+import { characterFacingRotation } from './CharacterFacing';
 import { createHazardPatch, createKidVisual } from './EntityFactory';
 import type { BookSystem } from './BookSystem';
 import type { HazardActor, KidActor, PlayerRuntime, RuntimeEvent, ShelfRuntime } from './models';
@@ -13,12 +14,7 @@ export interface KidUpdateResult {
   labels: string[];
 }
 
-export const kidFacingRotation = (velocity: Vector3): number => Math.atan2(velocity.x, velocity.z) + Math.PI;
-
-const lerpAngle = (current: number, target: number, amount: number): number => {
-  const delta = Math.atan2(Math.sin(target - current), Math.cos(target - current));
-  return current + delta * amount;
-};
+export const kidFacingRotation = characterFacingRotation;
 
 export class KidSystem {
   readonly kids: KidActor[] = [];
@@ -44,12 +40,13 @@ export class KidSystem {
       const id = this.nextKidId++;
       const spawn = this.rng.pick(this.spawnPoints).clone();
       spawn.x += index * 0.7;
+      const target = this.navigation.randomPoint();
       const actor: KidActor = {
         id,
         archetype,
         position: spawn,
         velocity: Vector3.Zero(),
-        target: this.navigation.randomPoint(),
+        target,
         behavior: 'entering',
         behaviorTimer: 1.2,
         stealTimer: this.rng.range(1.5, 4),
@@ -64,6 +61,7 @@ export class KidSystem {
         avoidanceSign: id % 2 === 0 ? -1 : 1,
       };
       actor.visual.root.position.copyFrom(spawn);
+      actor.visual.root.rotation.y = characterFacingRotation(target.subtract(spawn));
       this.kids.push(actor);
       spawned.push(actor);
     }
@@ -163,11 +161,7 @@ export class KidSystem {
       kid.position = this.navigation.steer(kid.position, this.crowdAwareTarget(kid), speed, delta, 0.47, kid.avoidanceSign);
       kid.velocity = kid.position.subtract(before).scale(1 / Math.max(delta, 0.001));
       if (kid.velocity.lengthSquared() > 0.02) {
-        kid.visual.root.rotation.y = lerpAngle(
-          kid.visual.root.rotation.y,
-          kidFacingRotation(kid.velocity),
-          Math.min(1, delta * 11),
-        );
+        kid.visual.root.rotation.y = characterFacingRotation(kid.velocity);
       }
       kid.visual.root.position.x = kid.position.x;
       kid.visual.root.position.z = kid.position.z;
