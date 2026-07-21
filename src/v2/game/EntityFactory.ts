@@ -31,6 +31,7 @@ export interface BookVisual {
   root: TransformNode;
   cover: Mesh;
   pageBlock: Mesh;
+  marker: Mesh;
   genreId: GenreId;
   update(time: number, moving: boolean): void;
   dispose(): void;
@@ -511,6 +512,17 @@ export const createBookVisual = (
   pageBlock.position = new Vector3(0.035, 0.15, 0);
   pageBlock.material = pagesMaterial;
 
+  const marker = MeshBuilder.CreateTorus(
+    `book-marker-${index}`,
+    { diameter: 1.18, thickness: 0.045, tessellation: 32 },
+    scene,
+  );
+  marker.parent = root;
+  marker.position.y = 0.055;
+  marker.material = material(scene, `book-marker-${genreId}`, genre.emissive, 0.55, 0.52);
+  marker.visibility = 0.72;
+  marker.isPickable = false;
+
   attachBox(scene, 'book-spine-band', { width: 0.065, height: 0.035, depth: 0.72 }, new Vector3(-0.24, 0.245, 0), root, iconMaterial);
   createGenreGlyph(scene, genreId, {
     name: `book-genre-mark-${index}`,
@@ -526,6 +538,7 @@ export const createBookVisual = (
     root,
     cover,
     pageBlock,
+    marker,
     genreId,
     update(time: number, moving: boolean): void {
       if (moving) {

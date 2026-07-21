@@ -86,7 +86,10 @@ export class GameApp implements UIActions {
         onFinish: (stats) => this.finishRun(stats),
         onLabel: (message, tone) => this.ui.flashWorldLabel(message, tone),
         onTutorial: (title, body, key) => this.ui.showTutorial(title, body, key),
-        onTutorialComplete: () => this.ui.hideTutorial(),
+        onTutorialComplete: () => {
+          this.ui.hideTutorial();
+          if (this.lastOptions) this.lastOptions = { ...this.lastOptions, tutorial: false };
+        },
       },
     );
     window.onkeydown = null;
@@ -110,7 +113,7 @@ export class GameApp implements UIActions {
     const options = {
       ...this.lastOptions,
       seed: sameSeed ? this.lastOptions.seed : Math.floor(Math.random() * 0x7fffffff),
-      tutorial: false,
+      tutorial: this.lastOptions.tutorial,
     };
     this.startRun(options);
   }

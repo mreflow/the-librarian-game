@@ -52,6 +52,8 @@ export class KidSystem {
         slowMultiplier: 1,
         visual: createKidVisual(this.scene, archetype, id, this.reducedMotion),
         partnerId: null,
+        tutorialTarget: false,
+        tutorialActor: false,
       };
       actor.visual.root.position.copyFrom(spawn);
       this.kids.push(actor);
@@ -62,6 +64,33 @@ export class KidSystem {
       (spawned[1] as KidActor).partnerId = (spawned[0] as KidActor).id;
     }
     return spawned;
+  }
+
+  stageTutorialTargets(position: Vector3, count = 1): KidActor[] {
+    const offsets = [
+      new Vector3(0, 0, 0),
+      new Vector3(-1.25, 0, 0.65),
+      new Vector3(1.25, 0, 0.65),
+    ];
+    const staged: KidActor[] = [];
+    for (let index = 0; index < count; index += 1) {
+      const actor = this.spawn('browser')[0];
+      if (!actor) break;
+      const offset = offsets[index] ?? new Vector3((index - 1) * 1.1, 0, 0.8);
+      const target = this.navigation.nearestOpenPoint(position.add(offset), 0.48);
+      actor.position.copyFrom(target);
+      actor.target.copyFrom(target);
+      actor.velocity.setAll(0);
+      actor.behavior = 'telegraph';
+      actor.behaviorTimer = Number.POSITIVE_INFINITY;
+      actor.specialTimer = Number.POSITIVE_INFINITY;
+      actor.tutorialTarget = true;
+      actor.tutorialActor = true;
+      actor.visual.root.position.copyFrom(target);
+      actor.visual.react('anticipate');
+      staged.push(actor);
+    }
+    return staged;
   }
 
   update(delta: number, elapsed: number, player: PlayerRuntime): KidUpdateResult {
@@ -80,6 +109,14 @@ export class KidSystem {
       kid.specialTimer -= delta;
       kid.calmRemaining = Math.max(0, kid.calmRemaining - delta);
       kid.slowMultiplier += (1 - kid.slowMultiplier) * Math.min(1, delta * 0.75);
+
+      if (kid.tutorialTarget && kid.calmRemaining <= 0) {
+        kid.behavior = 'telegraph';
+        kid.velocity.setAll(0);
+        kid.visual.root.position.copyFrom(kid.position);
+        kid.visual.update(elapsed, 0, 'warning', delta);
+        continue;
+      }
 
       if (kid.calmRemaining > 0) {
         kid.behavior = 'calmed';
@@ -158,6 +195,7 @@ export class KidSystem {
         successful = true;
       }
       const newlyCalmed = kid.calmRemaining <= 0;
+      kid.tutorialTarget = false;
       kid.calmRemaining = Math.max(kid.calmRemaining, calmDuration);
       kid.behavior = 'calmed';
       kid.target = this.closestExit(kid.position);
@@ -182,6 +220,7 @@ export class KidSystem {
     for (const kid of this.kids) {
       if (Vector3.DistanceSquared(kid.position, position) > radius ** 2) continue;
       const newlyCalmed = kid.calmRemaining <= 0;
+      kid.tutorialTarget = false;
       kid.calmRemaining = Math.max(kid.calmRemaining, duration);
       kid.behavior = 'calmed';
       kid.target = this.closestExit(kid.position);
@@ -260,6 +299,19 @@ export class KidSystem {
     return this.kids
       .filter((kid) => kid.calmRemaining <= 0)
       .sort((a, b) => Vector3.DistanceSquared(a.position, position) - Vector3.DistanceSquared(b.position, position))[0]?.position.clone() ?? null;
+  }
+
+  clearTutorialActors(): void {
+    for (const kid of [...this.kids]) {
+      if (!kid.tutorialActor) continue;
+      if (kid.heldBookId !== null) this.books.dropFromKid(kid.id, false);
+      kid.visual.dispose();
+      this.kids.splice(this.kids.indexOf(kid), 1);
+    }
+  }
+
+  tutorialActorCount(): number {
+    return this.kids.filter((kid) => kid.tutorialActor).length;
   }
 
   destroy(): void {

@@ -23,7 +23,31 @@ interface DebugSnapshot {
     seed: number;
     tutorial: boolean;
   };
+  player: { x: number; z: number; carriedBooks: number };
+  tutorial: {
+    active: boolean;
+    step: { id: string; number: number; total: number; title: string } | null;
+    marker: { x: number; z: number } | null;
+  };
   chaos: { total: number; threshold: string };
+  director: {
+    elapsed: number;
+    phase: string;
+    event: string | null;
+    kids: number;
+    tutorialKids: number;
+    looseBooks: number;
+  };
+  stats: {
+    booksCollected: number;
+    booksShelved: number;
+    kidsCalmed: number;
+    objectivesCompleted: number;
+    bestCombo: number;
+    maxChaos: number;
+    timelineSamples: number;
+    toolUses: Record<string, number>;
+  };
   progression: {
     level: number;
     xp: number;
@@ -41,6 +65,7 @@ interface LibrarianDebug {
   spawn(archetype?: string, count?: number): void;
   setChaos(amount: number): void;
   finish(won?: boolean): void;
+  teleport(x: number, z: number): void;
   snapshot(): DebugSnapshot;
 }
 
@@ -95,7 +120,7 @@ export const openTitle = async (page: Page, save: SeedSave | null = null): Promi
 };
 
 export const startRun = async (page: Page): Promise<void> => {
-  await page.getByRole('button', { name: /Start (?:first )?shift/i }).click();
+  await page.getByRole('button', { name: /Start (?:guided tutorial|shift)/i }).click();
   await expect(page.getByRole('region', { name: 'Shift status' })).toBeVisible();
   await page.waitForFunction(() => Boolean(window.librarianDebug));
 };

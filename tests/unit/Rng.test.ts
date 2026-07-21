@@ -3,6 +3,14 @@ import { describe, expect, it } from 'vitest';
 import { dailySeed, Rng } from '../../src/v2/systems/Rng';
 
 describe('Rng', () => {
+  it('restarts its sequence when reset to the same seed', () => {
+    const rng = new Rng(42);
+    const first = [rng.next(), rng.next(), rng.next()];
+    rng.reset(42);
+
+    expect([rng.next(), rng.next(), rng.next()]).toEqual(first);
+  });
+
   it('replays the same sequence for the same seed', () => {
     const first = new Rng(42);
     const second = new Rng(42);

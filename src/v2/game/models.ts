@@ -36,6 +36,8 @@ export interface KidActor {
   slowMultiplier: number;
   visual: CharacterVisual;
   partnerId: number | null;
+  tutorialTarget: boolean;
+  tutorialActor: boolean;
 }
 
 export interface HazardActor {

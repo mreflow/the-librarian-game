@@ -19,7 +19,7 @@ test('opens the 3D title screen and its field guide', async ({ page }) => {
 
   await expect(page).toHaveTitle(/The Librarian: After Hours/i);
   await expect(page.locator('#game-canvas')).toBeVisible();
-  await expect(page.getByRole('button', { name: /Start (?:first )?shift/i })).toBeEnabled();
+  await expect(page.getByRole('button', { name: /Start guided tutorial/i })).toBeEnabled();
   await expect(page.getByText(/Babylon 3D/i)).toBeVisible();
 
   await page.getByRole('button', { name: /How to play/i }).click();
@@ -85,6 +85,110 @@ test('starts, pauses, and resumes a fresh shift', async ({ page }) => {
   await expect(pauseDialog).toBeVisible();
   await pauseDialog.getByRole('button', { name: /Resume shift/i }).click();
   await expect(pauseDialog).toBeHidden();
+});
+
+test('opens a first run with an immediate guided task and the corrected W/S direction', async ({ page }) => {
+  await openTitle(page);
+  await startRun(page);
+
+  const hud = page.getByRole('region', { name: 'Shift status' });
+  await expect(hud.locator('[data-hud="objective-title"]')).toHaveText(/Step 1 of 5 · Pick up the glowing book/i);
+  await expect(hud.locator('[data-hud="tutorial"]')).toContainText('Loose books jump into your carry rack automatically');
+
+  const before = await debugSnapshot(page);
+  expect(before.options).toMatchObject({ mode: 'quick', difficulty: 'calm', tutorial: true });
+  expect(before.tutorial.step?.id).toBe('pickup');
+
+  await page.keyboard.down('KeyW');
+  await page.waitForTimeout(260);
+  await page.keyboard.up('KeyW');
+  const afterW = await debugSnapshot(page);
+  expect(afterW.player.z).toBeGreaterThan(before.player.z);
+
+  await page.keyboard.down('KeyS');
+  await page.waitForTimeout(140);
+  await page.keyboard.up('KeyS');
+  const afterS = await debugSnapshot(page);
+  expect(afterS.player.z).toBeLessThan(afterW.player.z);
+});
+
+test('offers a replayable tutorial after prior shifts', async ({ page }) => {
+  await openTitle(page, unlockedSave({ totalRuns: 4 }));
+  await page.getByRole('button', { name: 'Replay tutorial' }).click();
+  await expect(page.getByRole('region', { name: 'Shift status' })).toBeVisible();
+  await page.waitForFunction(() => Boolean(window.librarianDebug));
+
+  expect((await debugSnapshot(page)).options).toMatchObject({
+    mode: 'quick',
+    difficulty: 'calm',
+    mapId: 'grand-reading-room',
+    librarianId: 'head-librarian',
+    tutorial: true,
+  });
+});
+
+test('gates the complete tutorial on pickup, return, Intervene, and Shush Wave', async ({ page }) => {
+  await openTitle(page);
+  await startRun(page);
+
+  const teleportToMarker = async (): Promise<void> => {
+    const marker = (await debugSnapshot(page)).tutorial.marker;
+    expect(marker).not.toBeNull();
+    await page.evaluate(({ x, z }) => window.librarianDebug?.teleport(x, z), marker as { x: number; z: number });
+  };
+
+  await teleportToMarker();
+  await expect.poll(async () => (await debugSnapshot(page)).tutorial.step?.id).toBe('return');
+
+  await teleportToMarker();
+  await expect.poll(async () => (await debugSnapshot(page)).tutorial.step?.id).toBe('intervene');
+
+  await teleportToMarker();
+  await page.keyboard.press('Space');
+  await expect.poll(async () => (await debugSnapshot(page)).tutorial.step?.id).toBe('signature');
+
+  await teleportToMarker();
+  await page.keyboard.press('Space');
+  expect((await debugSnapshot(page)).tutorial.step?.id).toBe('signature');
+  await page.keyboard.press('KeyQ');
+  await expect.poll(async () => (await debugSnapshot(page)).tutorial.step?.id).toBe('chaos');
+
+  await page.evaluate(() => {
+    if (window.librarianDebug) window.librarianDebug.timeScale = 10;
+  });
+  await expect.poll(async () => (await debugSnapshot(page)).tutorial.active).toBe(false);
+  await expect(page.locator('[data-hud="objective-title"]')).toHaveText('Return the loose books');
+  const opening = await debugSnapshot(page);
+  expect(opening.director.kids).toBeGreaterThanOrEqual(2);
+  expect(opening.director.tutorialKids).toBe(0);
+  expect(opening.director.elapsed).toBeLessThan(5);
+  expect(opening.progression).toMatchObject({ level: 1, xp: 0 });
+  expect(opening.stats).toMatchObject({
+    booksCollected: 0,
+    booksShelved: 0,
+    kidsCalmed: 0,
+    objectivesCompleted: 0,
+    bestCombo: 0,
+    toolUses: {},
+  });
+  expect(opening.stats.maxChaos).toBeLessThan(15);
+
+  await page.evaluate(() => window.librarianDebug?.finish(true));
+  await expect(page.getByRole('heading', { name: 'Order restored' })).toBeVisible();
+  await page.getByRole('button', { name: 'Retry same schedule' }).click();
+  await expect(page.getByRole('region', { name: 'Shift status' })).toBeVisible();
+  await page.waitForFunction(() => Boolean(window.librarianDebug));
+  expect((await debugSnapshot(page)).options.tutorial).toBe(false);
+});
+
+test('starts ordinary shifts with visible returns and a concrete objective', async ({ page }) => {
+  await openTitle(page, unlockedSave({ totalRuns: 2 }));
+  await startRun(page);
+
+  const hud = page.getByRole('region', { name: 'Shift status' });
+  await expect(hud.locator('[data-hud="objective-title"]')).toHaveText('Return the loose books');
+  await expect(hud.locator('[data-hud="objective-detail"]')).toContainText('Pick up three books');
+  expect((await debugSnapshot(page)).director.looseBooks).toBeGreaterThanOrEqual(7);
 });
 
 test('opens an upgrade draft and applies a deterministic progression choice', async ({ page }) => {
@@ -237,7 +341,7 @@ test('advances the real run schedule to its first objective', async ({ page }) =
   });
 
   const objective = page.locator('[data-hud="objective-title"]');
-  await expect(objective).toHaveText(/Clear the returns cart|Adventure storytime|Quiet the reading room|Restore indoor voices|Staff the help desk|Clear the west stacks|Perfect the route|Make the rounds/);
+  await expect(objective).toHaveText(/Return the loose books|Clear the returns cart|Adventure storytime|Quiet the reading room|Restore indoor voices|Staff the help desk|Clear the west stacks|Perfect the route|Make the rounds/);
   expect((await debugSnapshot(page)).options.mode).toBe('quick');
 });
 
@@ -245,7 +349,7 @@ test('keeps the title and modal controls usable on a narrow touch viewport', asy
   await page.setViewportSize({ width: 390, height: 844 });
   await openTitle(page);
 
-  await expect(page.getByRole('button', { name: /Start (?:first )?shift/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Start guided tutorial/i })).toBeVisible();
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1),
   ).toBe(true);

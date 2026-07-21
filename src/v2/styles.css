@@ -1127,7 +1127,7 @@ kbd {
   top: 26%;
   left: var(--safe-left);
   display: grid;
-  width: min(19rem, calc(100vw - 2rem));
+  width: min(25rem, calc(100vw - 2rem));
   grid-template-columns: 1fr auto;
   gap: 0.28rem 1rem;
   padding: 1rem 1rem 1rem 1.15rem;
@@ -1138,6 +1138,15 @@ kbd {
   border-radius: 3px 8px 8px 3px;
   box-shadow: var(--shadow-deep);
   animation: tutorial-in 450ms var(--ease-spring) both;
+}
+
+.tutorial-card > small {
+  grid-column: 1 / -1;
+  color: rgba(239, 207, 120, 0.72);
+  font-size: 0.61rem;
+  font-weight: 760;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
 }
 
 .tutorial-card span {
@@ -1156,7 +1165,7 @@ kbd {
 
 .tutorial-card kbd {
   grid-column: 2;
-  grid-row: 1 / span 2;
+  grid-row: 2 / span 2;
   align-self: center;
   color: var(--walnut-950);
   background: var(--brass-300);

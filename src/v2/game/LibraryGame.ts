@@ -30,6 +30,7 @@ import { ObjectiveSystem, type ObjectiveResult } from './ObjectiveSystem';
 import { ProgressionSystem } from './ProgressionSystem';
 import { RunDirector, type DirectorDirective } from './RunDirector';
 import { ToolSystem, type ToolEffect } from './ToolSystem';
+import { TutorialDirector, type TutorialEvent, type TutorialStep } from './TutorialDirector';
 import { WorldBuilder, type BuiltWorld } from './WorldBuilder';
 
 export interface LibraryGameCallbacks {
@@ -61,11 +62,14 @@ interface DebugControls {
   finale: (stage?: number) => void;
   setChaos: (amount: number) => void;
   finish: (won?: boolean) => void;
+  teleport: (x: number, z: number) => void;
   snapshot: () => DebugSnapshot;
 }
 
 interface DebugSnapshot {
   options: RunOptions;
+  player: { x: number; z: number; carriedBooks: number };
+  tutorial: ReturnType<TutorialDirector['snapshot']> & { marker: { x: number; z: number } | null };
   chaos: ChaosState;
   progression: {
     level: number;
@@ -80,7 +84,18 @@ interface DebugSnapshot {
     phase: string;
     event: string | null;
     kids: number;
+    tutorialKids: number;
     looseBooks: number;
+  };
+  stats: {
+    booksCollected: number;
+    booksShelved: number;
+    kidsCalmed: number;
+    objectivesCompleted: number;
+    bestCombo: number;
+    maxChaos: number;
+    timelineSamples: number;
+    toolUses: Partial<Record<ToolId, number>>;
   };
   telemetry: ReturnType<Telemetry['export']>;
   performance: ReturnType<LibraryGame['performanceSummary']>;
@@ -95,11 +110,12 @@ export class LibraryGame {
   private readonly cosmeticRng: Rng;
   private readonly navigation: NavigationSystem;
   private readonly progression: ProgressionSystem;
-  private readonly director: RunDirector;
+  private director: RunDirector;
   private readonly objective: ObjectiveSystem;
   private readonly books: BookSystem;
   private readonly kids: KidSystem;
   private readonly tools: ToolSystem;
+  private readonly tutorial: TutorialDirector;
   private readonly player: PlayerRuntime;
   private chaos: ChaosState = initialChaos();
   private paused = false;
@@ -107,8 +123,9 @@ export class LibraryGame {
   private interveneCooldown = 0;
   private lastHudUpdate = 0;
   private lastTimelineSample = -1;
-  private nextTutorialStep = 0;
-  private tutorialStepTime = 0;
+  private tutorialMarker: Mesh | null = null;
+  private tutorialMarkerTarget: Vector3 | null = null;
+  private tutorialTargetShelf: ShelfRuntime | null = null;
   private objectiveCompleted = 0;
   private booksCollected = 0;
   private booksShelved = 0;
@@ -172,13 +189,14 @@ export class LibraryGame {
     this.books = new BookSystem(this.scene, this.shelves, this.rng, settings.reducedMotion);
     this.kids = new KidSystem(this.scene, this.navigation, this.books, this.shelves, this.world.spawnPoints, this.rng, settings.reducedMotion);
     this.tools = new ToolSystem(librarian.startingTool, this.progression);
+    this.tutorial = new TutorialDirector(options.tutorial);
     const playerVisual = createLibrarianVisual(this.scene, librarian, settings.reducedMotion);
-    const initialPosition = this.navigation.nearestOpenPoint(new Vector3(0, 0, map.depth / 2 - 4));
+    const initialPosition = this.navigation.nearestOpenPoint(new Vector3(-6, 0, -map.depth / 2 + 3), 0.7);
     playerVisual.root.position.copyFrom(initialPosition);
     this.player = {
       position: initialPosition,
       velocity: Vector3.Zero(),
-      facing: new Vector3(0, 0, -1),
+      facing: new Vector3(0, 0, 1),
       stamina: 100,
       maxStamina: 100,
       carry: [],
@@ -190,13 +208,11 @@ export class LibraryGame {
       sprintMultiplier: 1.55,
       secondWindAvailable: true,
     };
-    this.books.seedLooseBooks(options.tutorial ? 3 : 7);
-    this.kids.spawn('browser');
-    if (!options.tutorial) this.kids.spawn('browser');
+    if (this.tutorial.active) this.beginTutorial();
+    else this.beginOpeningShift(7, 2);
     window.addEventListener('librarian:signature', this.signatureListener);
     this.installDebugControls();
     this.telemetry.record('run_started', 0, { seed: options.seed, mode: options.mode, map: options.mapId });
-    if (options.tutorial) callbacks.onTutorial('Make the rounds', 'Move through the library and follow the glowing book markers.', 'WASD');
   }
 
   update(): void {
@@ -283,6 +299,7 @@ export class LibraryGame {
 
   destroy(): void {
     this.restorePowerFlicker();
+    this.disposeTutorialMarker();
     window.removeEventListener('librarian:signature', this.signatureListener);
     window.removeEventListener('librarian:debug-timescale', this.debugTimeScaleListener);
     window.removeEventListener('librarian:debug-invulnerable', this.debugInvulnerableListener);
@@ -336,14 +353,13 @@ export class LibraryGame {
       const sprintNoise = Math.max(0, 1 - this.progression.passiveRank('soft-soles') * 0.22);
       this.calmPerSecond -= 0.035 * sprintNoise;
     }
-    if (this.options.tutorial && this.nextTutorialStep === 0 && moving && this.director.elapsed > 0.8) {
-      this.nextTutorialStep = 1;
-      this.tutorialStepTime = 0;
-      this.callbacks.onTutorial('Books find you', 'Walk near a loose book. It will arc into your carry rack automatically.', 'Move');
-    }
   }
 
   private intervene(): void {
+    if (this.tutorial.active && this.tutorial.current?.id !== 'intervene') {
+      this.callbacks.onLabel('FOLLOW THE GUIDED STEP FIRST', 'event');
+      return;
+    }
     if (this.interveneCooldown > 0) return;
     this.interveneCooldown = 0.65;
     const radius = 2 + this.progression.passiveRank('long-arms') * 0.15;
@@ -361,14 +377,14 @@ export class LibraryGame {
 
   private activateSignature(): void {
     if (this.paused || this.finished) return;
+    if (this.tutorial.active && this.tutorial.current?.id !== 'signature') {
+      this.callbacks.onLabel('SHUSH WAVE COMES AFTER INTERVENE', 'event');
+      return;
+    }
     const effect = this.tools.activateSignature(this.player.position, this.player.facing, this.highestPriorityHotspot());
     if (!effect) return;
     this.resolveToolEffect(effect);
     this.audio.uiTick(280);
-    if (this.options.tutorial && this.nextTutorialStep === 3) {
-      this.nextTutorialStep = 4;
-      this.tutorialStepTime = 0;
-    }
   }
 
   private resolveToolEffect(effect: ToolEffect): void {
@@ -388,6 +404,9 @@ export class LibraryGame {
         }
         this.spawnRing(effect.evolved ? '#f2dd88' : '#9bd0b7', effect.position, effect.radius * 2, 0.72);
         if (!effect.reveal) this.callbacks.onLabel(effect.evolved ? 'SILENT READING' : `${TOOLS[effect.source].name.toUpperCase()} · ${count} CALMED`, 'good');
+        if (count > 0 && this.tutorial.current?.id === 'signature') {
+          this.advanceTutorial('signature');
+        }
         break;
       }
       case 'collect': {
@@ -446,6 +465,7 @@ export class LibraryGame {
   }
 
   private resolveDirective(directive: DirectorDirective): void {
+    if (this.tutorial.active) return;
     switch (directive.type) {
       case 'spawn': {
         const progress = Number.isFinite(this.director.duration)
@@ -596,26 +616,20 @@ export class LibraryGame {
         this.booksCollected += event.amount ?? 1;
         this.audio.playSfx('pickup', this.cosmeticRng.range(-0.08, 0.1));
         if (this.booksCollected === 1) this.telemetry.record('first_pickup', this.director.elapsed);
-        if (this.options.tutorial && this.nextTutorialStep === 1) {
-          this.nextTutorialStep = 2;
-          this.tutorialStepTime = 0;
-          const genre = event.genreId ? GENRES.find((candidate) => candidate.id === event.genreId) : null;
-          this.callbacks.onTutorial('Match the mark', `Carry ${genre?.name ?? 'this'} books to the shelf with the same color and ${genre?.icon ?? 'symbol'}.`, 'Follow marker');
-        }
+        if (this.tutorial.current?.id === 'pickup') this.advanceTutorial('book-collected');
       } else if (event.type === 'book-shelved') {
         this.booksShelved += event.amount ?? 1;
         this.audio.playSfx('shelve', this.cosmeticRng.range(-0.06, 0.16));
         if (this.booksShelved === 1) this.telemetry.record('first_shelve', this.director.elapsed);
-        if (this.options.tutorial && this.nextTutorialStep === 2) {
-          this.nextTutorialStep = 3;
-          this.tutorialStepTime = 0;
-          this.callbacks.onTutorial('Protect the shelves', 'Move close to trouble and use your Shush Wave before a book disappears.', 'Q / LB');
-        }
+        if (this.tutorial.current?.id === 'return') this.advanceTutorial('book-shelved');
       } else if (event.type === 'kid-calmed') {
         this.kidsCalmed += event.amount ?? 1;
-      } else if (event.type === 'intervene' && !this.firstInterventionRecorded) {
-        this.firstInterventionRecorded = true;
-        this.telemetry.record('first_intervention', this.director.elapsed);
+      } else if (event.type === 'intervene') {
+        if (!this.firstInterventionRecorded) {
+          this.firstInterventionRecorded = true;
+          this.telemetry.record('first_intervention', this.director.elapsed);
+        }
+        if (this.tutorial.current?.id === 'intervene') this.advanceTutorial('intervene');
       }
     }
   }
@@ -708,7 +722,8 @@ export class LibraryGame {
     this.worldBuilder.updateOcclusion(this.player.position);
     for (const shelf of this.shelves) {
       const carriedGenre = this.player.carry.some((book) => GENRES[shelf.genreIndex]?.id === book.genreId);
-      shelf.glow.visibility += ((carriedGenre ? 0.72 : 0.08) - shelf.glow.visibility) * Math.min(1, delta * 8);
+      const tutorialTarget = this.tutorial.current?.id === 'return' && shelf === this.tutorialTargetShelf;
+      shelf.glow.visibility += ((tutorialTarget ? 1 : carriedGenre ? 0.72 : 0.08) - shelf.glow.visibility) * Math.min(1, delta * 8);
     }
   }
 
@@ -731,17 +746,147 @@ export class LibraryGame {
     this.activeEffects.push({ mesh, age: 0, duration, startScale: 1, endScale: 5.4 });
   }
 
-  private updateTutorial(delta: number): void {
-    if (!this.options.tutorial) return;
-    this.tutorialStepTime += delta;
-    if (this.nextTutorialStep === 4 && this.tutorialStepTime > 1.5) {
-      this.nextTutorialStep = 5;
-      this.callbacks.onTutorial('Read the room', 'The meter names its biggest source. Recover before Last Call expires.', 'Watch Chaos');
-    } else if (this.nextTutorialStep === 5 && this.tutorialStepTime > 7) {
-      this.nextTutorialStep = 6;
-      this.callbacks.onTutorialComplete();
-      if (!this.objective.snapshot()) this.objective.start('shelving-rush');
+  private beginTutorial(): void {
+    const shelfCandidates = this.shelves
+      .filter((shelf) => Vector3.DistanceSquared(shelf.position, this.player.position) > 64)
+      .sort((left, right) => Vector3.DistanceSquared(left.position, this.player.position) - Vector3.DistanceSquared(right.position, this.player.position));
+    this.tutorialTargetShelf = shelfCandidates[0] ?? this.shelves[0] ?? null;
+    if (this.tutorialTargetShelf) {
+      const position = this.navigation.nearestOpenPoint(this.player.position.add(new Vector3(0, 0, 2.75)), 0.72);
+      const book = this.books.placeTutorialBook(this.tutorialTargetShelf, position);
+      if (book) this.setTutorialMarker(book.position, 1.75);
     }
+    const step = this.tutorial.current;
+    if (step) this.presentTutorialStep(step);
+  }
+
+  private beginOpeningShift(bookCount: number, kidCount: number): void {
+    this.books.seedReturns(bookCount, this.openingReturnPositions(bookCount));
+    for (let index = 0; index < kidCount; index += 1) this.kids.spawn('browser');
+    if (!this.objective.snapshot()) {
+      const objective = this.objective.start('opening-returns');
+      this.callbacks.onLabel(`FIRST TASK · ${objective.title}`, 'event');
+    }
+  }
+
+  private openingReturnPositions(count: number): Vector3[] {
+    const forward = this.player.facing.lengthSquared() > 0.01 ? this.player.facing.clone().normalize() : new Vector3(0, 0, 1);
+    const right = new Vector3(forward.z, 0, -forward.x);
+    return Array.from({ length: count }, (_, index) => {
+      const row = Math.floor(index / 5);
+      const column = index % 5;
+      const lateral = (column - Math.min(4, count - row * 5 - 1) / 2) * 1.2;
+      const point = this.player.position
+        .add(forward.scale(3.35 + row * 1.25))
+        .add(right.scale(lateral));
+      return this.navigation.nearestOpenPoint(point, 0.42);
+    });
+  }
+
+  private advanceTutorial(event: TutorialEvent): void {
+    const step = this.tutorial.record(event);
+    if (step) this.presentTutorialStep(step);
+  }
+
+  private presentTutorialStep(step: TutorialStep): void {
+    if (step.id === 'return' && this.tutorialTargetShelf) {
+      this.setTutorialMarker(this.shelfApproachPoint(this.tutorialTargetShelf), 2.2);
+    } else if (step.id === 'intervene') {
+      const target = this.navigation.nearestOpenPoint(this.player.position.add(new Vector3(1.1, 0, 1.3)), 0.48);
+      const staged = this.kids.stageTutorialTargets(target, 1);
+      if (staged[0]) this.setTutorialMarker(staged[0].position, 2.35);
+    } else if (step.id === 'signature') {
+      const target = this.navigation.nearestOpenPoint(this.player.position.add(new Vector3(0, 0, 2.2)), 0.48);
+      const staged = this.kids.stageTutorialTargets(target, 3);
+      if (staged.length) {
+        const center = staged.reduce((sum, kid) => sum.add(kid.position), Vector3.Zero()).scale(1 / staged.length);
+        this.setTutorialMarker(center, 4.8);
+      }
+    } else if (step.id === 'chaos') {
+      this.disposeTutorialMarker();
+      this.chaos.total = Math.max(this.chaos.total, 28);
+      this.callbacks.onLabel('TRAINING COMPLETE · CLUTTER + NOISE + DISORDER = CHAOS', 'good');
+    }
+    this.callbacks.onTutorial(
+      `Step ${step.number} of ${step.total} · ${step.title}`,
+      step.description,
+      step.key,
+    );
+  }
+
+  private shelfApproachPoint(shelf: ShelfRuntime): Vector3 {
+    const horizontal = shelf.width >= shelf.depth;
+    if (horizontal) {
+      const side = this.player.position.z <= shelf.position.z ? -1 : 1;
+      const x = Math.max(shelf.position.x - shelf.width * 0.38, Math.min(shelf.position.x + shelf.width * 0.38, this.player.position.x));
+      return this.navigation.nearestOpenPoint(new Vector3(x, 0, shelf.position.z + side * (shelf.depth / 2 + 1.05)), 0.52);
+    }
+    const side = this.player.position.x <= shelf.position.x ? -1 : 1;
+    const z = Math.max(shelf.position.z - shelf.depth * 0.38, Math.min(shelf.position.z + shelf.depth * 0.38, this.player.position.z));
+    return this.navigation.nearestOpenPoint(new Vector3(shelf.position.x + side * (shelf.width / 2 + 1.05), 0, z), 0.52);
+  }
+
+  private setTutorialMarker(position: Vector3, diameter: number): void {
+    this.disposeTutorialMarker();
+    this.tutorialMarkerTarget = position.clone();
+    this.tutorialMarker = createEffectRing(this.scene, '#f6cf63', position, diameter);
+  }
+
+  private disposeTutorialMarker(): void {
+    this.tutorialMarker?.dispose(false);
+    this.tutorialMarker = null;
+    this.tutorialMarkerTarget = null;
+  }
+
+  private updateTutorial(delta: number): void {
+    if (this.tutorialMarker && this.tutorialMarkerTarget) {
+      this.tutorialMarker.position.x = this.tutorialMarkerTarget.x;
+      this.tutorialMarker.position.z = this.tutorialMarkerTarget.z;
+      const pulse = 1 + Math.sin(this.director.elapsed * 4.2) * 0.09;
+      this.tutorialMarker.scaling.setAll(pulse);
+      this.tutorialMarker.visibility = 0.82 + Math.sin(this.director.elapsed * 4.2) * 0.16;
+    }
+    if (this.tutorial.update(delta)) {
+      this.disposeTutorialMarker();
+      this.callbacks.onTutorialComplete();
+      this.callbacks.onLabel('GUIDED TOUR COMPLETE · THE SHIFT STARTS NOW', 'good');
+      this.kids.clearTutorialActors();
+      this.resetForOpeningShift();
+      this.beginOpeningShift(5, 2);
+    }
+  }
+
+  private resetForOpeningShift(): void {
+    this.rng.reset(this.options.seed);
+    this.progression.reset();
+    this.books.resetRunState();
+    this.objective.clear();
+    this.tools.resetCooldowns();
+    this.chaos = initialChaos();
+    this.interveneCooldown = 0;
+    this.objectiveCompleted = 0;
+    this.booksCollected = 0;
+    this.booksShelved = 0;
+    this.kidsCalmed = 0;
+    this.firstInterventionRecorded = false;
+    this.maxChaos = 0;
+    this.chaosFloor = 0;
+    this.finaleObjectiveComplete = false;
+    this.calmPerSecond = 0;
+    this.secondWindUsed = false;
+    this.activeZones.clear();
+    this.timeline.length = 0;
+    for (const tool of Object.keys(this.toolUses) as ToolId[]) delete this.toolUses[tool];
+    this.player.secondWindAvailable = true;
+    this.applyPlayerStats();
+    this.player.stamina = this.player.maxStamina;
+    this.timeScale = 1;
+    this.frameTimeSamples = [];
+    this.director = new RunDirector(this.options.mode, this.rng, this.options.mapId, this.options.difficulty);
+    this.lastHudUpdate = -1;
+    this.lastTimelineSample = -1;
+    this.telemetry.reset();
+    this.telemetry.record('run_started', 0, { seed: this.options.seed, mode: this.options.mode, map: this.options.mapId });
   }
 
   private sampleTimeline(): void {
@@ -775,6 +920,14 @@ export class LibraryGame {
       kids: this.kids.kids.length,
       eventLabel: this.director.activeEvent?.name ?? null,
       eventRemaining: this.director.eventRemaining,
+      tutorial: this.tutorial.current
+        ? {
+            step: this.tutorial.current.number,
+            total: this.tutorial.current.total,
+            title: this.tutorial.current.title,
+            description: this.tutorial.current.description,
+          }
+        : null,
       minimap: {
         player: { x: this.player.position.x, z: this.player.position.z },
         hotspots: this.books.hotspots().slice(0, 16).map((point) => ({ x: point.x, z: point.z })),
@@ -850,10 +1003,23 @@ export class LibraryGame {
         this.chaos.total = Math.max(0, Math.min(100, amount));
       },
       finish: (won = true) => this.finish(won, won ? undefined : 'Debug run ended.'),
+      teleport: (x, z) => {
+        if (!Number.isFinite(x) || !Number.isFinite(z)) return;
+        this.player.position.copyFrom(this.navigation.nearestOpenPoint(new Vector3(x, 0, z), 0.58));
+        this.player.visual.root.position.x = this.player.position.x;
+        this.player.visual.root.position.z = this.player.position.z;
+      },
       snapshot: () => {
         const progression = this.progression.snapshot();
         return {
           options: this.options,
+          player: { x: this.player.position.x, z: this.player.position.z, carriedBooks: this.player.carry.length },
+          tutorial: {
+            ...this.tutorial.snapshot(),
+            marker: this.tutorialMarkerTarget
+              ? { x: this.tutorialMarkerTarget.x, z: this.tutorialMarkerTarget.z }
+              : null,
+          },
           chaos: this.chaos,
           progression: {
             ...progression,
@@ -865,7 +1031,18 @@ export class LibraryGame {
             phase: this.director.phase,
             event: this.director.activeEvent?.id ?? null,
             kids: this.kids.kids.length,
+            tutorialKids: this.kids.tutorialActorCount(),
             looseBooks: this.books.looseCount(),
+          },
+          stats: {
+            booksCollected: this.booksCollected,
+            booksShelved: this.booksShelved,
+            kidsCalmed: this.kidsCalmed,
+            objectivesCompleted: this.objectiveCompleted,
+            bestCombo: this.books.getBestCombo(),
+            maxChaos: this.maxChaos,
+            timelineSamples: this.timeline.length,
+            toolUses: { ...this.toolUses },
           },
           telemetry: this.telemetry.export(),
           performance: this.performanceSummary(),

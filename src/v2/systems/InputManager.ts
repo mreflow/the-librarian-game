@@ -40,6 +40,26 @@ export const DEFAULT_GAMEPAD_BINDINGS: GamepadBindings = {
 
 export const createDefaultGamepadBindings = (): GamepadBindings => structuredClone(DEFAULT_GAMEPAD_BINDINGS);
 
+export const keyboardMovementAxes = (
+  left: boolean,
+  right: boolean,
+  up: boolean,
+  down: boolean,
+): { moveX: number; moveZ: number } => ({
+  moveX: Number(right) - Number(left),
+  moveZ: Number(up) - Number(down),
+});
+
+export const gamepadMovementAxes = (
+  axisX: number,
+  axisY: number,
+  deadzone = 0.2,
+): { moveX: number; moveZ: number; active: boolean } => {
+  const moveX = Math.abs(axisX) > deadzone ? axisX : 0;
+  const moveZ = Math.abs(axisY) > deadzone ? -axisY : 0;
+  return { moveX, moveZ, active: Boolean(moveX || moveZ) };
+};
+
 export class InputManager {
   private readonly down = new Set<string>();
   private readonly pressed = new Set<string>();
@@ -160,17 +180,20 @@ export class InputManager {
       this.pressed.clear();
       return this.neutralFrame();
     }
-    const deadzone = 0.2;
-    let moveX = Number(this.actionDown('right')) - Number(this.actionDown('left'));
-    let moveZ = Number(this.actionDown('down')) - Number(this.actionDown('up'));
+    const keyboardMovement = keyboardMovementAxes(
+      this.actionDown('left'),
+      this.actionDown('right'),
+      this.actionDown('up'),
+      this.actionDown('down'),
+    );
+    let { moveX, moveZ } = keyboardMovement;
     let usingGamepad = false;
 
     if (gamepad) {
-      const axisX = Math.abs(gamepad.axes[0] ?? 0) > deadzone ? (gamepad.axes[0] ?? 0) : 0;
-      const axisY = Math.abs(gamepad.axes[1] ?? 0) > deadzone ? (gamepad.axes[1] ?? 0) : 0;
-      if (axisX || axisY) {
-        moveX = axisX;
-        moveZ = axisY;
+      const gamepadMovement = gamepadMovementAxes(gamepad.axes[0] ?? 0, gamepad.axes[1] ?? 0);
+      if (gamepadMovement.active) {
+        moveX = gamepadMovement.moveX;
+        moveZ = gamepadMovement.moveZ;
         usingGamepad = true;
       }
     }

@@ -27,6 +27,25 @@ const passiveChoice = (id: PassiveId, currentRank: number): UpgradeChoice => ({
 });
 
 describe('ProgressionSystem', () => {
+  it('resets training progression to the starting loadout', () => {
+    const progression = new ProgressionSystem('shush-wave', ['shush-wave', 'rolling-cart'], new Rng(9));
+    progression.award(100);
+    const choice = progression.createChoices().find((candidate) => candidate.id === 'rolling-cart');
+    if (choice) progression.apply(choice);
+
+    progression.reset();
+
+    expect(progression.snapshot()).toEqual({
+      level: 1,
+      xp: 0,
+      xpToNext: 75,
+      tools: { 'shush-wave': 1 },
+      passives: {},
+      evolutions: [],
+    });
+    expect(progression.hasDraft()).toBe(false);
+  });
+
   it('starts at level one with the librarian signature equipped', () => {
     const progression = new ProgressionSystem('shush-wave', ['shush-wave'], new Rng(1));
 

@@ -31,4 +31,8 @@ export class Telemetry {
   export(): TimelineEntry[] {
     return structuredClone(this.timeline);
   }
+
+  reset(): void {
+    this.timeline.length = 0;
+  }
 }

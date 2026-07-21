@@ -185,6 +185,12 @@ export interface HudState {
   kids: number;
   eventLabel: string | null;
   eventRemaining: number;
+  tutorial: {
+    step: number;
+    total: number;
+    title: string;
+    description: string;
+  } | null;
   minimap: {
     player: Point2;
     hotspots: Point2[];

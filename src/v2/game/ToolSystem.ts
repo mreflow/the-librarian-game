@@ -48,6 +48,10 @@ export class ToolSystem {
     return TOOLS[id].cooldown * (1 - quickStudy * 0.07);
   }
 
+  resetCooldowns(): void {
+    this.cooldowns.clear();
+  }
+
   private reset(id: ToolId): void {
     const rank = this.progression.toolRank(id);
     this.cooldowns.set(id, this.cooldownMax(id) * Math.max(0.58, 1 - (rank - 1) * 0.08));

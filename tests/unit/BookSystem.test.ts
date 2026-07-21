@@ -103,4 +103,28 @@ describe('BookSystem transfers', () => {
     expect(player.carry).toHaveLength(0);
     expect(books.looseCount()).toBe(0);
   });
+
+  it('drops knocked books outside the shelf footprint', () => {
+    const knocked = books.knockFromShelf(shelf, 8);
+
+    expect(knocked).toHaveLength(8);
+    for (const book of knocked) {
+      const insideShelf =
+        Math.abs(book.position.x - shelf.position.x) <= shelf.width / 2 &&
+        Math.abs(book.position.z - shelf.position.z) <= shelf.depth / 2;
+      expect(insideShelf).toBe(false);
+    }
+  });
+
+  it('places a marked tutorial book at the requested clear return point', () => {
+    const position = new Vector3(3, 0, -4);
+    const book = books.placeTutorialBook(shelf, position);
+
+    expect(book).not.toBeNull();
+    expect(book?.genreId).toBe('adventure');
+    expect(book?.marked).toBe(true);
+    expect(book?.position.x).toBe(3);
+    expect(book?.position.z).toBe(-4);
+    expect(book?.visual.marker.visibility).toBeGreaterThan(0);
+  });
 });

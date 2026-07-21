@@ -2,6 +2,11 @@ export class Rng {
   private state: number;
 
   constructor(seed: number) {
+    this.state = 0;
+    this.reset(seed);
+  }
+
+  reset(seed: number): void {
     this.state = seed >>> 0 || 0x6d2b79f5;
   }
 

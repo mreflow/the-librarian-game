@@ -22,11 +22,22 @@ export class ProgressionSystem {
   private pendingDrafts = 0;
 
   constructor(
-    startingTool: ToolId,
+    private readonly startingTool: ToolId,
     private readonly availableTools: ToolId[],
     private readonly rng: Rng,
   ) {
     this.tools[startingTool] = 1;
+  }
+
+  reset(): void {
+    this.level = 1;
+    this.xp = 0;
+    this.xpToNext = xpForLevel(1);
+    for (const id of Object.keys(this.tools) as ToolId[]) delete this.tools[id];
+    for (const id of Object.keys(this.passives) as PassiveId[]) delete this.passives[id];
+    this.tools[this.startingTool] = 1;
+    this.evolutions.clear();
+    this.pendingDrafts = 0;
   }
 
   award(amount: number): boolean {

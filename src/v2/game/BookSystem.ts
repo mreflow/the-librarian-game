@@ -36,9 +36,40 @@ export class BookSystem {
     private readonly reducedMotion = false,
   ) {}
 
-  seedLooseBooks(count: number): void {
+  seedLooseBooks(count: number): BookActor[] {
     const shelves = this.rng.shuffle(this.shelves).slice(0, count);
-    for (const shelf of shelves) this.knockFromShelf(shelf, 1);
+    return shelves.flatMap((shelf) => this.knockFromShelf(shelf, 1));
+  }
+
+  seedReturns(count: number, positions: readonly Vector3[]): BookActor[] {
+    const shelves = this.rng.shuffle(this.shelves.filter((shelf) => shelf.bookCount > 0)).slice(0, count);
+    const output: BookActor[] = [];
+    for (const [index, shelf] of shelves.entries()) {
+      const position = positions[index];
+      if (!position || shelf.bookCount <= 0 || this.books.length >= 90) break;
+      shelf.bookCount -= 1;
+      const genre = GENRES[shelf.genreIndex % GENRES.length]?.id ?? 'adventure';
+      const book = this.createBook(genre, position);
+      book.position.y = 0.35 + (index % 2) * 0.18;
+      book.visual.root.position.copyFrom(book.position);
+      book.velocity = new Vector3(this.rng.range(-0.35, 0.35), 1.25 + (index % 3) * 0.18, this.rng.range(-0.2, 0.35));
+      output.push(book);
+    }
+    this.aisleClearAwarded = false;
+    return output;
+  }
+
+  placeTutorialBook(shelf: ShelfRuntime, position: Vector3): BookActor | null {
+    if (shelf.bookCount <= 0 || this.books.length >= 90) return null;
+    shelf.bookCount -= 1;
+    const genre = GENRES[shelf.genreIndex % GENRES.length]?.id ?? 'adventure';
+    const book = this.createBook(genre, position);
+    book.position.y = 0.8;
+    book.visual.root.position.copyFrom(book.position);
+    book.velocity = new Vector3(0, 1.45, 0.18);
+    this.markBook(book);
+    this.aisleClearAwarded = false;
+    return book;
   }
 
   knockFromShelf(shelf: ShelfRuntime, count = 1): BookActor[] {
@@ -47,15 +78,17 @@ export class BookSystem {
       if (shelf.bookCount <= 0 || this.books.length >= 90) break;
       shelf.bookCount -= 1;
       const genre = GENRES[shelf.genreIndex % GENRES.length]?.id ?? 'adventure';
-      const angle = this.rng.range(0, Math.PI * 2);
-      const distance = this.rng.range(1.15, 2.2);
-      const position = new Vector3(
-        shelf.position.x + Math.cos(angle) * distance,
-        0,
-        shelf.position.z + Math.sin(angle) * distance,
-      );
+      const horizontal = shelf.width >= shelf.depth;
+      const side = this.rng.pick([-1, 1]);
+      const along = this.rng.range(-0.36, 0.36) * (horizontal ? shelf.width : shelf.depth);
+      const clearance = (horizontal ? shelf.depth : shelf.width) / 2 + this.rng.range(0.82, 1.18);
+      const position = horizontal
+        ? new Vector3(shelf.position.x + along, 0, shelf.position.z + side * clearance)
+        : new Vector3(shelf.position.x + side * clearance, 0, shelf.position.z + along);
       const book = this.createBook(genre, position);
-      book.velocity = new Vector3(Math.cos(angle) * 1.6, 1.8, Math.sin(angle) * 1.6);
+      book.velocity = horizontal
+        ? new Vector3(this.rng.range(-0.45, 0.45), 1.8, side * 1.35)
+        : new Vector3(side * 1.35, 1.8, this.rng.range(-0.45, 0.45));
       output.push(book);
     }
     this.aisleClearAwarded = false;
@@ -69,6 +102,7 @@ export class BookSystem {
     const book = this.createBook(genre, shelf.position.clone());
     book.location = 'kid';
     book.holderId = kidId;
+    book.visual.marker.visibility = 0;
     return book;
   }
 
@@ -86,6 +120,7 @@ export class BookSystem {
     if (!book) return null;
     book.location = 'floor';
     book.holderId = null;
+    book.visual.marker.visibility = 0.72;
     book.position.y = 0;
     book.velocity = impulse
       ? new Vector3(this.rng.range(-1.4, 1.4), 1.6, this.rng.range(-1.4, 1.4))
@@ -143,6 +178,7 @@ export class BookSystem {
         book.visual.root.setParent(null);
         book.position.copyFrom(player.position);
         book.location = 'shelving';
+        book.visual.marker.visibility = 0;
         book.target = shelf.position.add(new Vector3(this.rng.range(-shelf.width * 0.35, shelf.width * 0.35), 1.35, 0));
         book.age = 0;
         shelf.bookCount += 1;
@@ -192,6 +228,7 @@ export class BookSystem {
       if (autoShelve) {
         const shelf = this.shelfFor(book.genreId);
         book.location = 'shelving';
+        book.visual.marker.visibility = 0;
         book.target = shelf.position.add(new Vector3(this.rng.range(-shelf.width * 0.3, shelf.width * 0.3), 1.35, 0));
         shelf.bookCount += 1;
         result.count += 1;
@@ -219,6 +256,7 @@ export class BookSystem {
       if (autoShelve) {
         const shelf = this.shelfFor(book.genreId);
         book.location = 'shelving';
+        book.visual.marker.visibility = 0;
         book.target = shelf.position.add(new Vector3(0, 1.35, 0));
         shelf.bookCount += 1;
         result.events.push({ type: 'book-shelved', genreId: book.genreId, marked: book.marked, amount: 1 });
@@ -233,9 +271,7 @@ export class BookSystem {
     for (const book of this.books) {
       if (marked >= limit) break;
       if (!book.marked && book.location === 'floor' && Vector3.DistanceSquared(book.position, position) <= radius ** 2) {
-        book.marked = true;
-        book.visual.cover.outlineColor = Color3.FromHexString('#f6cf63');
-        book.visual.cover.outlineWidth = 0.08;
+        this.markBook(book);
         marked += 1;
       }
     }
@@ -266,6 +302,15 @@ export class BookSystem {
     return this.bestCombo;
   }
 
+  resetRunState(): void {
+    this.combo = 0;
+    this.comboRemaining = 0;
+    this.bestCombo = 0;
+    this.lastShelfGenre = null;
+    this.carriedSinceEmpty = 0;
+    this.aisleClearAwarded = false;
+  }
+
   destroy(): void {
     for (const book of this.books) book.visual.dispose();
     this.books.length = 0;
@@ -293,10 +338,17 @@ export class BookSystem {
   private collectForPlayer(book: BookActor, player: PlayerRuntime): void {
     book.location = 'player';
     book.holderId = null;
+    book.visual.marker.visibility = 0;
     book.visual.root.setParent(player.visual.root);
     player.carry.push(book);
     this.carriedSinceEmpty += 1;
     this.arrangeCarry(player, 0);
+  }
+
+  private markBook(book: BookActor): void {
+    book.marked = true;
+    book.visual.cover.outlineColor = Color3.FromHexString('#f6cf63');
+    book.visual.cover.outlineWidth = 0.08;
   }
 
   private arrangeCarry(player: PlayerRuntime, elapsed: number): void {

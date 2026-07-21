@@ -102,7 +102,7 @@ export class UIController {
   ) {
     this.save = save;
     this.selectedMode = save.totalRuns === 0 ? 'quick' : 'standard';
-    this.selectedDifficulty = save.settings.defaultDifficulty;
+    this.selectedDifficulty = save.totalRuns === 0 ? 'calm' : save.settings.defaultDifficulty;
     document.documentElement.style.setProperty('--ui-scale', String(save.settings.uiScale));
     this.applySettingsClasses(save.settings);
     this.root.addEventListener('keydown', this.handleDialogKeyboard);
@@ -202,8 +202,9 @@ export class UIController {
               </div>
             </div>
           </div>
-          <button class="primary-action" data-action="start"><span>${this.save.totalRuns === 0 ? 'Start first shift' : 'Start shift'}</span><kbd>Enter</kbd></button>
+          <button class="primary-action" data-action="start"><span>${this.save.totalRuns === 0 ? 'Start guided tutorial' : 'Start shift'}</span><kbd>Enter</kbd></button>
           <nav class="title-links" aria-label="Game information">
+            <button data-action="tutorial">${this.save.totalRuns === 0 ? 'Guided tutorial' : 'Replay tutorial'}</button>
             <button data-panel="help">How to play</button>
             <button data-panel="catalog">Catalog <span>${this.save.stamps} stamps</span></button>
             <button data-panel="settings">Settings</button>
@@ -310,9 +311,16 @@ export class UIController {
       }).join('');
     }
 
-    if (state.objective) {
+    if (state.tutorial) {
+      this.setHudText('objective-title', `Step ${state.tutorial.step} of ${state.tutorial.total} · ${state.tutorial.title}`);
+      this.setHudText('objective-detail', state.tutorial.description);
+      this.setHudStyle('objective-progress', 'width', `${(state.tutorial.step / state.tutorial.total) * 100}%`);
+    } else if (state.objective) {
       this.setHudText('objective-title', state.objective.title);
-      this.setHudText('objective-detail', `${Math.floor(state.objective.progress)} / ${state.objective.target} · ${Math.ceil(state.objective.remaining)}s`);
+      this.setHudText(
+        'objective-detail',
+        `${state.objective.description} · ${Math.floor(state.objective.progress)} / ${state.objective.target} · ${Math.ceil(state.objective.remaining)}s`,
+      );
       this.setHudStyle('objective-progress', 'width', `${Math.min(100, (state.objective.progress / state.objective.target) * 100)}%`);
     } else {
       this.setHudText('objective-title', 'Keep the library orderly');
@@ -330,7 +338,7 @@ export class UIController {
   showTutorial(title: string, body: string, key: string): void {
     const tutorial = this.hudElements.get('tutorial');
     if (!tutorial) return;
-    tutorial.innerHTML = `<span>${title}</span><p>${body}</p><kbd>${key}</kbd>`;
+    tutorial.innerHTML = `<small>Guided shift</small><span>${title}</span><p>${body}</p><kbd>${key}</kbd>`;
     tutorial.classList.remove('hidden');
     this.announce(`${title}. ${body}`);
   }
@@ -526,6 +534,7 @@ export class UIController {
       });
     });
     this.root.querySelector('[data-action="start"]')?.addEventListener('click', () => this.beginSelectedRun());
+    this.root.querySelector('[data-action="tutorial"]')?.addEventListener('click', () => this.beginTutorialRun());
     this.root.querySelectorAll<HTMLButtonElement>('[data-panel]').forEach((button) => {
       button.addEventListener('click', () => this.openPanel(button.dataset.panel ?? 'help'));
     });
@@ -537,6 +546,10 @@ export class UIController {
   }
 
   private beginSelectedRun(): void {
+    if (this.save.totalRuns === 0) {
+      this.beginTutorialRun();
+      return;
+    }
     this.actions?.suppressGameplayInputUntilRelease();
     this.actions?.startRun({
       mode: this.selectedMode,
@@ -544,7 +557,19 @@ export class UIController {
       mapId: this.selectedMap,
       librarianId: this.selectedLibrarian,
       seed: this.selectedMode === 'daily' ? dailySeed() : Math.floor(Math.random() * 0x7fffffff),
-      tutorial: this.save.totalRuns === 0,
+      tutorial: false,
+    });
+  }
+
+  private beginTutorialRun(): void {
+    this.actions?.suppressGameplayInputUntilRelease();
+    this.actions?.startRun({
+      mode: 'quick',
+      difficulty: 'calm',
+      mapId: 'grand-reading-room',
+      librarianId: 'head-librarian',
+      seed: 2_020_042,
+      tutorial: true,
     });
   }
 
@@ -762,14 +787,14 @@ export class UIController {
     context.strokeRect(6, 6, canvas.width - 12, canvas.height - 12);
     for (const hotspot of state.minimap.hotspots.slice(0, 8)) {
       const x = ((hotspot.x + width / 2) / width) * (canvas.width - 16) + 8;
-      const y = ((hotspot.z + depth / 2) / depth) * (canvas.height - 16) + 8;
+      const y = ((depth / 2 - hotspot.z) / depth) * (canvas.height - 16) + 8;
       context.fillStyle = '#d8754e';
       context.beginPath();
       context.arc(x, y, 3.5, 0, Math.PI * 2);
       context.fill();
     }
     const playerX = ((state.minimap.player.x + width / 2) / width) * (canvas.width - 16) + 8;
-    const playerY = ((state.minimap.player.z + depth / 2) / depth) * (canvas.height - 16) + 8;
+    const playerY = ((depth / 2 - state.minimap.player.z) / depth) * (canvas.height - 16) + 8;
     context.fillStyle = '#f1d17a';
     context.beginPath();
     context.arc(playerX, playerY, 5, 0, Math.PI * 2);

@@ -49,6 +49,7 @@ export interface ScheduleBeat {
 }
 
 export const OBJECTIVES: ObjectiveDefinition[] = [
+  { id: 'opening-returns', title: 'Return the loose books', description: 'Pick up three books and carry each to the shelf with the same color and symbol.', metric: 'shelve-any', target: 3, duration: 90, rewardXp: 45, rewardCalm: 7 },
   { id: 'shelving-rush', title: 'Clear the returns cart', description: 'Return twelve books before the cart overflows.', metric: 'shelve-any', target: 12, duration: 65, rewardXp: 70, rewardCalm: 10 },
   { id: 'adventure-quota', title: 'Adventure storytime', description: 'Return six Adventure books before storytime.', metric: 'shelve-genre', target: 6, duration: 60, rewardXp: 80, rewardCalm: 9 },
   { id: 'quiet-reading-room', title: 'Quiet the reading room', description: 'Keep Chaos below 55 while the study group finishes.', metric: 'keep-chaos-low', target: 35, duration: 45, rewardXp: 75, rewardCalm: 12 },
