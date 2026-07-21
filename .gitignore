@@ -4,6 +4,10 @@ node_modules/
 # Build output
 dist/
 build/
+playwright-report/
+test-results/
+blob-report/
+.understand-anything/
 
 # Logs
 *.log

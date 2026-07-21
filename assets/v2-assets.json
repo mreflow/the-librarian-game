@@ -1,0 +1,109 @@
+{
+  "$schema": "./v2-assets.schema.json",
+  "schemaVersion": 1,
+  "policy": {
+    "scope": "Assets loaded by the v2 runtime",
+    "releaseGate": "Every runtime asset must be listed, hash-verified, and have a rights review before public distribution."
+  },
+  "assets": [
+    {
+      "runtimePath": "/pickup_book.mp3",
+      "sourcePath": "public-v2/pickup_book.mp3",
+      "kind": "audio",
+      "bytes": 8822,
+      "sha256": "7edfc9bbd4d954ef869200d41e098659e78374bbd2b61576f81c3b920fa28061",
+      "provenance": "Existing project asset inherited from version 1",
+      "rightsReview": "required"
+    },
+    {
+      "runtimePath": "/book_on_shelf.mp3",
+      "sourcePath": "public-v2/book_on_shelf.mp3",
+      "kind": "audio",
+      "bytes": 8822,
+      "sha256": "8730cf0799758bfabaf9e5489457351acab26d386149214345ede4b41525f2fa",
+      "provenance": "Existing project asset inherited from version 1",
+      "rightsReview": "required"
+    },
+    {
+      "runtimePath": "/kid_laughing_1.mp3",
+      "sourcePath": "public-v2/kid_laughing_1.mp3",
+      "kind": "audio",
+      "bytes": 33481,
+      "sha256": "862991bb3733520f3cd3a43dc175d216e9527af3433feef0363d49fc63716d27",
+      "provenance": "Existing project asset inherited from version 1",
+      "rightsReview": "required"
+    },
+    {
+      "runtimePath": "/kid_laughing_2.mp3",
+      "sourcePath": "public-v2/kid_laughing_2.mp3",
+      "kind": "audio",
+      "bytes": 33481,
+      "sha256": "1eb886f9971817bc2687e07319517aeeae3a271d7b7c8e63fd838da19940a491",
+      "provenance": "Existing project asset inherited from version 1",
+      "rightsReview": "required"
+    },
+    {
+      "runtimePath": "/kid_laughing_3.mp3",
+      "sourcePath": "public-v2/kid_laughing_3.mp3",
+      "kind": "audio",
+      "bytes": 17181,
+      "sha256": "76926673d440774e21c23cb269664813030df6cf87f323e84ea5705548794385",
+      "provenance": "Existing project asset inherited from version 1",
+      "rightsReview": "required"
+    },
+    {
+      "runtimePath": "/uh_oh.mp3",
+      "sourcePath": "public-v2/uh_oh.mp3",
+      "kind": "audio",
+      "bytes": 33481,
+      "sha256": "5f2ce6e0d5b81afa9227b3268105358a6be041c55931bf58c57d853b0f16a32f",
+      "provenance": "Existing project asset inherited from version 1",
+      "rightsReview": "required"
+    },
+    {
+      "runtimePath": "/yay.mp3",
+      "sourcePath": "public-v2/yay.mp3",
+      "kind": "audio",
+      "bytes": 8822,
+      "sha256": "eafaa91529ecf773218275a93c299307bcba4a429ccb67dac5869e765ad545be",
+      "provenance": "Existing project asset inherited from version 1",
+      "rightsReview": "required"
+    },
+    {
+      "runtimePath": "/menu_select.mp3",
+      "sourcePath": "public-v2/menu_select.mp3",
+      "kind": "audio",
+      "bytes": 8822,
+      "sha256": "cd2df02f8b5e8a033dbdd16ecfb9b735b837d4c042a71fe012a0a02e2a98a54e",
+      "provenance": "Existing project asset inherited from version 1",
+      "rightsReview": "required"
+    },
+    {
+      "runtimePath": "/out_of_breath.mp3",
+      "sourcePath": "public-v2/out_of_breath.mp3",
+      "kind": "audio",
+      "bytes": 48946,
+      "sha256": "4b7842eb716cd5358fbaa5f9fe69b794e294d0d1cb5c80e8eeb4fb17aa6f7df5",
+      "provenance": "Existing project asset inherited from version 1",
+      "rightsReview": "required"
+    },
+    {
+      "runtimePath": "/intro_music.mp3",
+      "sourcePath": "public-v2/intro_music.mp3",
+      "kind": "audio",
+      "bytes": 4402679,
+      "sha256": "82e96a1380a573b64587ed5a5e99b53701ed24f2fbdcbc6df135b9c6269fb4ae",
+      "provenance": "Existing project asset inherited from version 1",
+      "rightsReview": "required"
+    },
+    {
+      "runtimePath": "/game_music.mp3",
+      "sourcePath": "public-v2/game_music.mp3",
+      "kind": "audio",
+      "bytes": 5211145,
+      "sha256": "c5eabe740ee605f09cdaf49b5962a8067af36940c0d1acad970bdad8e4df9d90",
+      "provenance": "Existing project asset inherited from version 1",
+      "rightsReview": "required"
+    }
+  ]
+}

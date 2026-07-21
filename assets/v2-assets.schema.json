@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://the-librarian.example/schemas/v2-assets.schema.json",
+  "title": "The Librarian v2 asset provenance manifest",
+  "type": "object",
+  "required": ["schemaVersion", "policy", "assets"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "policy": {
+      "type": "object",
+      "required": ["scope", "releaseGate"],
+      "properties": {
+        "scope": { "type": "string", "minLength": 1 },
+        "releaseGate": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "assets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["runtimePath", "sourcePath", "kind", "bytes", "sha256", "provenance", "rightsReview"],
+        "properties": {
+          "runtimePath": { "type": "string", "pattern": "^/" },
+          "sourcePath": { "type": "string", "pattern": "^public-v2/" },
+          "kind": { "enum": ["audio", "image", "model", "video", "font"] },
+          "bytes": { "type": "integer", "minimum": 1 },
+          "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "provenance": { "type": "string", "minLength": 1 },
+          "rightsReview": { "enum": ["approved", "required"] }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}
