@@ -19,6 +19,9 @@ export interface BookTransferResult {
   events: RuntimeEvent[];
 }
 
+export const BOOK_REST_HEIGHT = 0.035;
+const SHELF_DROP_HEIGHT = 1.15;
+
 export class BookSystem {
   readonly books: BookActor[] = [];
   private nextId = 1;
@@ -59,6 +62,14 @@ export class BookSystem {
     return output;
   }
 
+  seedNearbyShelfDrops(count: number, origin: Vector3): BookActor[] {
+    const shelves = this.shelves
+      .filter((shelf) => shelf.bookCount > 0)
+      .sort((left, right) => Vector3.DistanceSquared(left.position, origin) - Vector3.DistanceSquared(right.position, origin))
+      .slice(0, count);
+    return shelves.flatMap((shelf) => this.knockFromShelf(shelf, 1, origin));
+  }
+
   placeTutorialBook(shelf: ShelfRuntime, position: Vector3): BookActor | null {
     if (shelf.bookCount <= 0 || this.books.length >= 90) return null;
     shelf.bookCount -= 1;
@@ -72,23 +83,28 @@ export class BookSystem {
     return book;
   }
 
-  knockFromShelf(shelf: ShelfRuntime, count = 1): BookActor[] {
+  knockFromShelf(shelf: ShelfRuntime, count = 1, toward?: Vector3): BookActor[] {
     const output: BookActor[] = [];
     for (let index = 0; index < count; index += 1) {
       if (shelf.bookCount <= 0 || this.books.length >= 90) break;
       shelf.bookCount -= 1;
       const genre = GENRES[shelf.genreIndex % GENRES.length]?.id ?? 'adventure';
       const horizontal = shelf.width >= shelf.depth;
-      const side = this.rng.pick([-1, 1]);
+      const side = toward
+        ? horizontal
+          ? toward.z <= shelf.position.z ? -1 : 1
+          : toward.x <= shelf.position.x ? -1 : 1
+        : this.rng.pick([-1, 1]);
       const along = this.rng.range(-0.36, 0.36) * (horizontal ? shelf.width : shelf.depth);
       const clearance = (horizontal ? shelf.depth : shelf.width) / 2 + this.rng.range(0.82, 1.18);
       const position = horizontal
-        ? new Vector3(shelf.position.x + along, 0, shelf.position.z + side * clearance)
-        : new Vector3(shelf.position.x + side * clearance, 0, shelf.position.z + along);
+        ? new Vector3(shelf.position.x + along, SHELF_DROP_HEIGHT, shelf.position.z + side * clearance)
+        : new Vector3(shelf.position.x + side * clearance, SHELF_DROP_HEIGHT, shelf.position.z + along);
       const book = this.createBook(genre, position);
+      book.sourceShelfId = shelf.id;
       book.velocity = horizontal
-        ? new Vector3(this.rng.range(-0.45, 0.45), 1.8, side * 1.35)
-        : new Vector3(side * 1.35, 1.8, this.rng.range(-0.45, 0.45));
+        ? new Vector3(this.rng.range(-0.45, 0.45), 0.85, side * 1.35)
+        : new Vector3(side * 1.35, 0.85, this.rng.range(-0.45, 0.45));
       output.push(book);
     }
     this.aisleClearAwarded = false;
@@ -100,6 +116,7 @@ export class BookSystem {
     shelf.bookCount -= 1;
     const genre = GENRES[shelf.genreIndex % GENRES.length]?.id ?? 'adventure';
     const book = this.createBook(genre, shelf.position.clone());
+    book.sourceShelfId = shelf.id;
     book.location = 'kid';
     book.holderId = kidId;
     book.visual.marker.visibility = 0;
@@ -121,7 +138,10 @@ export class BookSystem {
     book.location = 'floor';
     book.holderId = null;
     book.visual.marker.visibility = 0.72;
-    book.position.y = 0;
+    book.position.y = BOOK_REST_HEIGHT;
+    book.visual.root.rotation.x = 0;
+    book.visual.root.rotation.z = 0;
+    book.visual.root.rotation.y = this.rng.range(0, Math.PI * 2);
     book.velocity = impulse
       ? new Vector3(this.rng.range(-1.4, 1.4), 1.6, this.rng.range(-1.4, 1.4))
       : Vector3.Zero();
@@ -141,8 +161,8 @@ export class BookSystem {
       if (book.location === 'floor') {
         book.velocity.y -= 6.5 * delta;
         book.position.addInPlace(book.velocity.scale(delta));
-        if (book.position.y <= 0) {
-          book.position.y = 0;
+        if (book.position.y <= BOOK_REST_HEIGHT) {
+          book.position.y = BOOK_REST_HEIGHT;
           book.velocity.y = Math.abs(book.velocity.y) > 0.7 ? Math.abs(book.velocity.y) * 0.28 : 0;
           book.velocity.x *= 0.82;
           book.velocity.z *= 0.82;

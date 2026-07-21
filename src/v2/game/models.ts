@@ -16,6 +16,7 @@ export interface BookActor {
   holderId: number | null;
   marked: boolean;
   age: number;
+  sourceShelfId?: string;
   target?: Vector3;
 }
 
@@ -38,6 +39,7 @@ export interface KidActor {
   partnerId: number | null;
   tutorialTarget: boolean;
   tutorialActor: boolean;
+  avoidanceSign: -1 | 1;
 }
 
 export interface HazardActor {

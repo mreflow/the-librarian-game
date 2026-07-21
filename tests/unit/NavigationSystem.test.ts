@@ -48,6 +48,24 @@ describe('NavigationSystem', () => {
     expect(navigation.collides(around.x, around.z, 0.47)).toBe(false);
   });
 
+  it.each([-1, 1] as const)('commits to a route around a table instead of oscillating in place (side %s)', (side) => {
+    const map = MAPS['grand-reading-room'];
+    const navigation = new NavigationSystem(
+      map,
+      [{ x: 0, z: 0, width: 4.25, depth: 3.25 }],
+      new Rng(91),
+    );
+    const target = new Vector3(0, 0, 5);
+    let position = new Vector3(0, 0, -5);
+
+    for (let frame = 0; frame < 240; frame += 1) {
+      position = navigation.steer(position, target, 2, 0.05, 0.47, side);
+    }
+
+    expect(Vector3.Distance(position, target)).toBeLessThan(0.08);
+    expect(navigation.collides(position.x, position.z, 0.47)).toBe(false);
+  });
+
   it('returns a clone when already at the target', () => {
     const navigation = createNavigation();
     const start = new Vector3(3, 0, 3);
@@ -78,5 +96,13 @@ describe('NavigationSystem', () => {
 
     expect(result.equals(obstructed)).toBe(false);
     expect(navigation.collides(result.x, result.z, 0.7)).toBe(false);
+  });
+
+  it('clamps requested targets to the playable map before finding an open point', () => {
+    const navigation = createNavigation();
+    const result = navigation.nearestOpenPoint(new Vector3(100, 0, -100), 0.7);
+
+    expect(result.x).toBeLessThanOrEqual(21.3);
+    expect(result.z).toBeGreaterThanOrEqual(-15.3);
   });
 });

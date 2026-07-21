@@ -55,6 +55,25 @@ interface DebugSnapshot {
     passives: Record<string, number>;
     evolutions: string[];
   };
+  actors: Array<{
+    id: number;
+    behavior: string;
+    x: number;
+    z: number;
+    vx: number;
+    vz: number;
+    rotationY: number;
+  }>;
+  books: Array<{
+    id: number;
+    genreId: string;
+    location: string;
+    x: number;
+    y: number;
+    z: number;
+    rotationZ: number;
+    sourceShelfId: string | null;
+  }>;
 }
 
 interface LibrarianDebug {

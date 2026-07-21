@@ -188,7 +188,20 @@ test('starts ordinary shifts with visible returns and a concrete objective', asy
   const hud = page.getByRole('region', { name: 'Shift status' });
   await expect(hud.locator('[data-hud="objective-title"]')).toHaveText('Return the loose books');
   await expect(hud.locator('[data-hud="objective-detail"]')).toContainText('Pick up three books');
-  expect((await debugSnapshot(page)).director.looseBooks).toBeGreaterThanOrEqual(7);
+  const opening = await debugSnapshot(page);
+  expect(opening.director.looseBooks).toBeGreaterThanOrEqual(7);
+  expect(opening.books.filter((book) => book.location === 'floor').every((book) => book.sourceShelfId !== null)).toBe(true);
+
+  const firstSlot = hud.locator('.book-slot').first();
+  await firstSlot.evaluate((node) => {
+    (window as Window & { __carrySlot?: Element }).__carrySlot = node;
+  });
+  await page.waitForTimeout(400);
+  expect(
+    await page.evaluate(
+      () => (window as Window & { __carrySlot?: Element }).__carrySlot === document.querySelector('.book-slot'),
+    ),
+  ).toBe(true);
 });
 
 test('opens an upgrade draft and applies a deterministic progression choice', async ({ page }) => {

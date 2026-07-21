@@ -99,6 +99,25 @@ interface DebugSnapshot {
   };
   telemetry: ReturnType<Telemetry['export']>;
   performance: ReturnType<LibraryGame['performanceSummary']>;
+  actors: Array<{
+    id: number;
+    behavior: string;
+    x: number;
+    z: number;
+    vx: number;
+    vz: number;
+    rotationY: number;
+  }>;
+  books: Array<{
+    id: number;
+    genreId: string;
+    location: string;
+    x: number;
+    y: number;
+    z: number;
+    rotationZ: number;
+    sourceShelfId: string | null;
+  }>;
 }
 
 export class LibraryGame {
@@ -761,26 +780,12 @@ export class LibraryGame {
   }
 
   private beginOpeningShift(bookCount: number, kidCount: number): void {
-    this.books.seedReturns(bookCount, this.openingReturnPositions(bookCount));
+    this.books.seedNearbyShelfDrops(bookCount, this.player.position);
     for (let index = 0; index < kidCount; index += 1) this.kids.spawn('browser');
     if (!this.objective.snapshot()) {
       const objective = this.objective.start('opening-returns');
       this.callbacks.onLabel(`FIRST TASK · ${objective.title}`, 'event');
     }
-  }
-
-  private openingReturnPositions(count: number): Vector3[] {
-    const forward = this.player.facing.lengthSquared() > 0.01 ? this.player.facing.clone().normalize() : new Vector3(0, 0, 1);
-    const right = new Vector3(forward.z, 0, -forward.x);
-    return Array.from({ length: count }, (_, index) => {
-      const row = Math.floor(index / 5);
-      const column = index % 5;
-      const lateral = (column - Math.min(4, count - row * 5 - 1) / 2) * 1.2;
-      const point = this.player.position
-        .add(forward.scale(3.35 + row * 1.25))
-        .add(right.scale(lateral));
-      return this.navigation.nearestOpenPoint(point, 0.42);
-    });
   }
 
   private advanceTutorial(event: TutorialEvent): void {
@@ -1046,6 +1051,25 @@ export class LibraryGame {
           },
           telemetry: this.telemetry.export(),
           performance: this.performanceSummary(),
+          actors: this.kids.kids.map((kid) => ({
+            id: kid.id,
+            behavior: kid.behavior,
+            x: kid.position.x,
+            z: kid.position.z,
+            vx: kid.velocity.x,
+            vz: kid.velocity.z,
+            rotationY: kid.visual.root.rotation.y,
+          })),
+          books: this.books.books.map((book) => ({
+            id: book.id,
+            genreId: book.genreId,
+            location: book.location,
+            x: book.position.x,
+            y: book.position.y,
+            z: book.position.z,
+            rotationZ: book.visual.root.rotation.z,
+            sourceShelfId: book.sourceShelfId ?? null,
+          })),
         };
       },
     };

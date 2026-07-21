@@ -13,6 +13,13 @@ export interface KidUpdateResult {
   labels: string[];
 }
 
+export const kidFacingRotation = (velocity: Vector3): number => Math.atan2(velocity.x, velocity.z) + Math.PI;
+
+const lerpAngle = (current: number, target: number, amount: number): number => {
+  const delta = Math.atan2(Math.sin(target - current), Math.cos(target - current));
+  return current + delta * amount;
+};
+
 export class KidSystem {
   readonly kids: KidActor[] = [];
   readonly hazards: HazardActor[] = [];
@@ -54,6 +61,7 @@ export class KidSystem {
         partnerId: null,
         tutorialTarget: false,
         tutorialActor: false,
+        avoidanceSign: id % 2 === 0 ? -1 : 1,
       };
       actor.visual.root.position.copyFrom(spawn);
       this.kids.push(actor);
@@ -152,9 +160,15 @@ export class KidSystem {
       const speedBoost = kid.behavior === 'fleeing' || (kid.archetype === 'sprinter' && kid.behavior === 'carrying') ? 1.55 : 1;
       const speed = definition.speed * speedBoost * kid.slowMultiplier;
       const before = kid.position.clone();
-      kid.position = this.navigation.steer(kid.position, kid.target, speed, delta, 0.47);
+      kid.position = this.navigation.steer(kid.position, this.crowdAwareTarget(kid), speed, delta, 0.47, kid.avoidanceSign);
       kid.velocity = kid.position.subtract(before).scale(1 / Math.max(delta, 0.001));
-      if (kid.velocity.lengthSquared() > 0.02) kid.visual.root.rotation.y = Math.atan2(kid.velocity.x, kid.velocity.z);
+      if (kid.velocity.lengthSquared() > 0.02) {
+        kid.visual.root.rotation.y = lerpAngle(
+          kid.visual.root.rotation.y,
+          kidFacingRotation(kid.velocity),
+          Math.min(1, delta * 11),
+        );
+      }
       kid.visual.root.position.x = kid.position.x;
       kid.visual.root.position.z = kid.position.z;
       if (kid.behavior !== previousBehavior) {
@@ -323,9 +337,47 @@ export class KidSystem {
 
   private seekShelf(kid: KidActor): void {
     const shelf = this.rng.pick(this.shelves.filter((candidate) => candidate.bookCount > 0).length ? this.shelves.filter((candidate) => candidate.bookCount > 0) : this.shelves);
-    kid.target = shelf.position.add(new Vector3(this.rng.range(-shelf.width * 0.25, shelf.width * 0.25), 0, this.rng.pick([-1.35, 1.35])));
+    const horizontal = shelf.width >= shelf.depth;
+    if (horizontal) {
+      const side = kid.position.z <= shelf.position.z ? -1 : 1;
+      kid.target = new Vector3(
+        shelf.position.x + this.rng.range(-shelf.width * 0.3, shelf.width * 0.3),
+        0,
+        shelf.position.z + side * (shelf.depth / 2 + 0.88),
+      );
+    } else {
+      const side = kid.position.x <= shelf.position.x ? -1 : 1;
+      kid.target = new Vector3(
+        shelf.position.x + side * (shelf.width / 2 + 0.88),
+        0,
+        shelf.position.z + this.rng.range(-shelf.depth * 0.3, shelf.depth * 0.3),
+      );
+    }
+    kid.target = this.navigation.nearestOpenPoint(kid.target, 0.47);
     kid.behavior = 'seeking';
     kid.behaviorTimer = 0;
+  }
+
+  private crowdAwareTarget(kid: KidActor): Vector3 {
+    const separation = Vector3.Zero();
+    const comfortRadius = 1.05;
+    for (const other of this.kids) {
+      if (other.id === kid.id) continue;
+      let offset = kid.position.subtract(other.position);
+      offset.y = 0;
+      let distance = offset.length();
+      if (distance >= comfortRadius) continue;
+      if (distance < 0.001) {
+        const lowerId = Math.min(kid.id, other.id);
+        const upperId = Math.max(kid.id, other.id);
+        const angle = ((lowerId * 37 + upperId * 17) % 360) * (Math.PI / 180);
+        offset = new Vector3(Math.cos(angle), 0, Math.sin(angle));
+        if (kid.id > other.id) offset.scaleInPlace(-1);
+        distance = 0;
+      } else offset.scaleInPlace(1 / distance);
+      separation.addInPlace(offset.scale((1 - distance / comfortRadius) * 1.8));
+    }
+    return separation.lengthSquared() > 0.001 ? kid.target.add(separation) : kid.target;
   }
 
   private steal(kid: KidActor): void {

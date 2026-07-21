@@ -80,6 +80,7 @@ export class UIController {
   private selectedMap: MapId = 'grand-reading-room';
   private selectedLibrarian: LibrarianId = 'head-librarian';
   private hudLastSecond = -1;
+  private carrySignature: string | null = null;
   private hudElements = new Map<string, HTMLElement>();
   private latestStats: RunStats | null = null;
   private soundCueTimer = 0;
@@ -217,6 +218,7 @@ export class UIController {
   }
 
   showHud(): void {
+    this.carrySignature = null;
     this.root.innerHTML = `
       <section class="hud" aria-label="Shift status">
         <div class="hud-top">
@@ -303,12 +305,14 @@ export class UIController {
     this.setHudText('combo', state.combo > 1 ? `Dewey Chain ×${state.combo}` : 'Build a sorting streak');
 
     const carry = this.hudElements.get('carry');
-    if (carry) {
+    const carrySignature = `${state.carryCapacity}:${state.carriedGenres.join(',')}`;
+    if (carry && carrySignature !== this.carrySignature) {
       carry.innerHTML = Array.from({ length: state.carryCapacity }, (_, index) => {
         const genreId = state.carriedGenres[index];
         const genre = genreId ? GENRE_BY_ID[genreId] : null;
         return `<span class="book-slot ${genre ? 'filled' : ''}" ${genre ? `style="--book:${genre.color}" title="${genre.name}"` : ''}>${genre?.icon ?? ''}</span>`;
       }).join('');
+      this.carrySignature = carrySignature;
     }
 
     if (state.tutorial) {

@@ -25,19 +25,34 @@ export class NavigationSystem {
     return result;
   }
 
-  steer(position: Vector3, target: Vector3, speed: number, delta: number, radius: number): Vector3 {
-    const direct = target.subtract(position);
+  steer(position: Vector3, target: Vector3, speed: number, delta: number, radius: number, avoidanceSign: -1 | 1 = 1): Vector3 {
+    const safeTarget = this.nearestOpenPoint(target, radius);
+    const direct = safeTarget.subtract(position);
     direct.y = 0;
     if (direct.lengthSquared() < 0.01) return position.clone();
-    direct.normalize().scaleInPlace(speed * delta);
-    const directMove = this.move(position, direct, radius);
-    if (Vector3.DistanceSquared(directMove, position) > 0.0001) return directMove;
+    const distance = direct.length();
+    const step = Math.min(distance, Math.max(0, speed * delta));
+    const forward = direct.scale(1 / distance);
+    const directMove = this.move(position, forward.scale(step), radius);
+    const directProgress = Vector3.Dot(directMove.subtract(position), forward);
+    if (directProgress >= step * 0.62 || Vector3.DistanceSquared(directMove, safeTarget) < 0.02) return directMove;
 
-    const perpendicularA = new Vector3(-direct.z, 0, direct.x);
-    const perpendicularB = perpendicularA.scale(-1);
-    const optionA = this.move(position, perpendicularA, radius);
-    const optionB = this.move(position, perpendicularB, radius);
-    return Vector3.DistanceSquared(optionA, target) <= Vector3.DistanceSquared(optionB, target) ? optionA : optionB;
+    // Commit to one side of an obstacle instead of accepting tiny movements
+    // back toward the center line. The old behavior alternated left/right at
+    // table edges, making visitors look frozen while their models flickered.
+    const tangent = new Vector3(-forward.z, 0, forward.x).scaleInPlace(avoidanceSign);
+    const candidates = [
+      tangent.add(forward.scale(0.18)).normalize(),
+      tangent,
+      tangent.scale(-1).add(forward.scale(0.18)).normalize(),
+      tangent.scale(-1),
+      forward.scale(-1),
+    ];
+    for (const direction of candidates) {
+      const option = this.move(position, direction.scale(step), radius);
+      if (Vector3.DistanceSquared(option, position) >= Math.max(0.0001, step * step * 0.08)) return option;
+    }
+    return directMove;
   }
 
   randomPoint(margin = 2): Vector3 {
@@ -53,11 +68,16 @@ export class NavigationSystem {
   }
 
   nearestOpenPoint(point: Vector3, radius = 0.7): Vector3 {
-    if (!this.collides(point.x, point.z, radius)) return point.clone();
+    const origin = new Vector3(this.clampX(point.x, radius), 0, this.clampZ(point.z, radius));
+    if (!this.collides(origin.x, origin.z, radius)) return origin;
     for (let ring = 1; ring <= 8; ring += 1) {
       for (let step = 0; step < 12; step += 1) {
         const angle = (step / 12) * Math.PI * 2;
-        const candidate = new Vector3(point.x + Math.cos(angle) * ring, 0, point.z + Math.sin(angle) * ring);
+        const candidate = new Vector3(
+          this.clampX(origin.x + Math.cos(angle) * ring, radius),
+          0,
+          this.clampZ(origin.z + Math.sin(angle) * ring, radius),
+        );
         if (!this.collides(candidate.x, candidate.z, radius)) return candidate;
       }
     }

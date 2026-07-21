@@ -1,7 +1,7 @@
 import { MeshBuilder, NullEngine, Scene, TransformNode, Vector3 } from '@babylonjs/core';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { BookSystem } from '../../src/v2/game/BookSystem';
+import { BOOK_REST_HEIGHT, BookSystem } from '../../src/v2/game/BookSystem';
 import type { CharacterVisual } from '../../src/v2/game/EntityFactory';
 import type { PlayerRuntime, ShelfRuntime } from '../../src/v2/game/models';
 import { Rng } from '../../src/v2/systems/Rng';
@@ -126,5 +126,52 @@ describe('BookSystem transfers', () => {
     expect(book?.position.x).toBe(3);
     expect(book?.position.z).toBe(-4);
     expect(book?.visual.marker.visibility).toBeGreaterThan(0);
+  });
+
+  it('drops nearby books from their matching shelf and on the player-facing side', () => {
+    books.destroy();
+    const shelves: ShelfRuntime[] = [
+      shelf,
+      {
+        ...shelf,
+        id: 'science-shelf',
+        genreIndex: 1,
+        position: new Vector3(8, 0, 0),
+        root: new TransformNode('science-shelf', scene),
+        glow: MeshBuilder.CreateBox('science-shelf-glow', { size: 0.1 }, scene),
+      },
+      {
+        ...shelf,
+        id: 'nature-shelf',
+        genreIndex: 2,
+        position: new Vector3(16, 0, 0),
+        root: new TransformNode('nature-shelf', scene),
+        glow: MeshBuilder.CreateBox('nature-shelf-glow', { size: 0.1 }, scene),
+      },
+    ];
+    books = new BookSystem(scene, shelves, new Rng(456), true);
+
+    const dropped = books.seedNearbyShelfDrops(2, new Vector3(-4, 0, -5));
+
+    expect(dropped).toHaveLength(2);
+    expect(dropped.map((book) => [book.sourceShelfId, book.genreId])).toEqual([
+      ['adventure-shelf', 'adventure'],
+      ['science-shelf', 'science'],
+    ]);
+    expect(dropped.every((book) => book.position.y > 1)).toBe(true);
+    expect(dropped[0]?.position.z).toBeLessThan(shelf.position.z);
+  });
+
+  it('lays a kid-carried book flat above the floor when it is dropped', () => {
+    const held = books.takeFromShelf(17, shelf);
+    expect(held).not.toBeNull();
+    books.syncKidBook(17, new Vector3(2, 0, 3));
+    expect(held?.visual.root.rotation.z).toBe(Math.PI / 2);
+
+    const dropped = books.dropFromKid(17, false);
+
+    expect(dropped?.position.y).toBe(BOOK_REST_HEIGHT);
+    expect(dropped?.visual.root.rotation.x).toBe(0);
+    expect(dropped?.visual.root.rotation.z).toBe(0);
   });
 });

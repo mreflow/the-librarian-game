@@ -664,13 +664,13 @@ const characterController = (
       const motionScale = reducedMotion ? 0.42 : 1;
       const cadence = 6 + speed * 1.25;
       const swing = Math.sin(time * cadence + idlePhase) * 0.62 * stride * motionScale;
-      const warningPulse = (Math.sin(time * 9 + idlePhase) + 1) * 0.5;
+      const warningPulse = (Math.sin(time * 4.2 + idlePhase) + 1) * 0.5;
       const fleeing = mood === 'flee';
       const warning = mood === 'warning';
       const calm = mood === 'calm';
 
-      leftArm.rotation.x = warning ? -0.95 - warningPulse * 0.22 : calm ? -0.18 : swing;
-      rightArm.rotation.x = warning ? -0.95 - warningPulse * 0.22 : calm ? 0.18 : -swing;
+      leftArm.rotation.x = warning ? -0.95 - warningPulse * 0.1 : calm ? -0.18 : swing;
+      rightArm.rotation.x = warning ? -0.95 - warningPulse * 0.1 : calm ? 0.18 : -swing;
       leftArm.rotation.z = fleeing ? -0.42 : calm ? -0.16 : 0;
       rightArm.rotation.z = fleeing ? 0.42 : calm ? 0.16 : 0;
       leftLeg.rotation.x = -swing * 0.72;
@@ -681,7 +681,7 @@ const characterController = (
       body.rotation.z = fleeing && !reducedMotion ? Math.sin(time * 13 + idlePhase) * 0.075 : 0;
       head.rotation.x = warning ? 0.16 : calm ? -0.08 : 0;
       head.rotation.z = warning
-        ? Math.sin(time * 9 + idlePhase) * 0.1 * motionScale
+        ? Math.sin(time * 4.2 + idlePhase) * 0.055 * motionScale
         : calm
           ? Math.sin(time * 2 + idlePhase) * 0.035 * motionScale
           : 0;
@@ -712,8 +712,8 @@ const characterController = (
         squashY = 1 + (squashY - 1) * 0.35;
       }
       poseRoot.scaling = new Vector3(squashX, squashY, squashX);
-      ring.scaling.setAll(warning ? 1 + warningPulse * (reducedMotion ? 0.025 : 0.1) : 1);
-      ring.visibility = warning ? 0.92 : style === 'tornado' ? 0.72 : style === 'librarian' ? 1 : 0.52;
+      ring.scaling.setAll(warning ? 1 + warningPulse * (reducedMotion ? 0.015 : 0.045) : 1);
+      ring.visibility = warning ? 0.78 : style === 'tornado' ? 0.72 : style === 'librarian' ? 1 : 0.52;
     },
     react(nextReaction: CharacterReaction): void {
       reaction = nextReaction;
