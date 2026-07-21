@@ -54,6 +54,7 @@ interface DebugControls {
   timeScale: number;
   invulnerable: boolean;
   awardXp: (amount?: number) => void;
+  advance: (seconds?: number) => void;
   spawn: (archetype?: string, count?: number) => void;
   event: (id?: string) => void;
   objective: (id?: string) => void;
@@ -826,6 +827,11 @@ export class LibraryGame {
       timeScale: this.timeScale,
       invulnerable: this.invulnerable,
       awardXp: (amount = 100) => this.awardXp(amount),
+      advance: (seconds = 1) => {
+        const safeSeconds = Math.max(0, Math.min(600, Number.isFinite(seconds) ? seconds : 0));
+        for (const directive of this.director.update(safeSeconds)) this.resolveDirective(directive);
+        this.maybeUpdateHud();
+      },
       spawn: (archetype = 'browser', count = 1) => {
         for (let index = 0; index < count; index += 1) this.kids.spawn(archetype as Parameters<KidSystem['spawn']>[0]);
       },

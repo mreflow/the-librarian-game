@@ -37,6 +37,7 @@ interface LibrarianDebug {
   timeScale: number;
   invulnerable: boolean;
   awardXp(amount?: number): void;
+  advance(seconds?: number): void;
   spawn(archetype?: string, count?: number): void;
   setChaos(amount: number): void;
   finish(won?: boolean): void;

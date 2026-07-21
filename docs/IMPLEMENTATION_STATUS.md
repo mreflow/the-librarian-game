@@ -33,7 +33,7 @@ This document maps the roadmap to executable evidence. A checked implementation 
 Evidence captured on July 20, 2026 from the production build on `codex/librarian-2.0`:
 
 - `npm run verify:full`: lint, strict typecheck, 11/11 asset references, 94/94 unit tests, production build, and 12/12 Chromium journeys passed.
-- Production output: 2.084 MB JavaScript (498.53 KB gzip), 55.33 KB CSS (12.73 KB gzip), two bundled code assets, and no module-preload fan-out.
+- Production output: 2.085 MB JavaScript (498.56 KB gzip), 55.33 KB CSS (12.73 KB gzip), two bundled code assets, and no module-preload fan-out.
 - Built artifact: approximately 12 MB including 9.4 MB of inherited music. The title-screen transfer is approximately 4.9 MB, below the 8 MiB development target.
 - Direct browser stress captures with 17 active visitors stayed below the 16.7 ms frame-time budget: Grand Reading Room P95 9.1 ms and Midnight Archives P95 10.3 ms on the development Mac.
 - Browser QA covered both map finales, normal gameplay, the title screen at ultrawide width, and debug-hidden production presentation. Reference captures live in `docs/visuals/`.

@@ -38,7 +38,7 @@ The unit suite also locks the simplified balance simulator to reproducible seed 
 
 ## Latest local evidence
 
-The July 20, 2026 release-candidate run passed lint, typechecking, 11/11 manifested runtime references, 94/94 unit tests, the production build, and 12/12 Chromium journeys. The production code output is intentionally one JavaScript and one CSS asset: direct Babylon module imports keep the JavaScript at 2.084 MB raw / 498.53 KB gzip, while disabling shader code splitting avoids hundreds of tiny module-preload requests.
+The July 20, 2026 release-candidate run passed lint, typechecking, 11/11 manifested runtime references, 94/94 unit tests, the production build, and 12/12 Chromium journeys. The production code output is intentionally one JavaScript and one CSS asset: direct Babylon module imports keep the JavaScript at 2.085 MB raw / 498.56 KB gzip, while disabling shader code splitting avoids hundreds of tiny module-preload requests.
 
 ## Vercel previews
 

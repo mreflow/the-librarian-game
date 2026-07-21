@@ -225,7 +225,7 @@ test('pauses automatically when the page loses visibility', async ({ page }) => 
   await expect(page.getByRole('dialog', { name: 'Quiet moment' })).toBeVisible();
 });
 
-test('accelerates the real run schedule to its first objective', async ({ page }) => {
+test('advances the real run schedule to its first objective', async ({ page }) => {
   await openTitle(page, unlockedSave({ totalRuns: 1 }));
   await page.getByRole('radio', { name: /Quick shift/i }).click();
   await startRun(page);
@@ -233,12 +233,12 @@ test('accelerates the real run schedule to its first objective', async ({ page }
   await page.evaluate(() => {
     if (!window.librarianDebug) throw new Error('Debug controls are unavailable.');
     window.librarianDebug.invulnerable = true;
-    window.librarianDebug.timeScale = 20;
+    window.librarianDebug.advance(110);
   });
 
   const objective = page.locator('[data-hud="objective-title"]');
-  await expect(objective).not.toHaveText('Keep the library orderly', { timeout: 15_000 });
   await expect(objective).toHaveText(/Clear the returns cart|Adventure storytime|Quiet the reading room|Restore indoor voices|Staff the help desk|Clear the west stacks|Perfect the route|Make the rounds/);
+  expect((await debugSnapshot(page)).options.mode).toBe('quick');
 });
 
 test('keeps the title and modal controls usable on a narrow touch viewport', async ({ page }) => {
